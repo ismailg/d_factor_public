@@ -1,0 +1,103 @@
+---
+title: "power_simulation"
+author: "Ismail Guennouni"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Power simulation
+
+```{r}
+# Load required libraries
+library(lme4)
+library(simr)
+library(truncnorm)
+
+
+# Define parameters
+n_participants <- 50  # Starting sample size
+n_rounds <- 25  # Number of rounds per game
+effect_size <- 0.1  # Expected effect size (correlation between D-score and returns in the RTG)
+alpha <- 0.05  # Significance level
+desired_power <- 0.8  # Desired power
+
+# Function to generate data and fit model
+generate_and_fit <- function(n_part) {
+  set.seed(123 + n_part)  # Ensure reproducibility while allowing variation
+  
+  intercept <- rep(0.4, each = n_part * n_rounds * 2)
+  d_scores <- rnorm(n_part, mean = 2.5, sd = 0.7)  # According to Moshagen, 2018 study
+  
+  # Assign "stable" for the first n_rounds and "volatile" for the next n_rounds per participant
+  opponent <- rep(rep(c("stable", "volatile"), each = n_rounds), times = n_part)
+  
+  inv_scaled <- rnorm(n_part * n_rounds * 2, mean = 0, sd = 1)
+  
+  beta_investment <- 0.04  # From previous RTG studies we ran 
+  beta_opponent <- 0.2  # From RL simulations
+  beta_d_score <- -effect_size * 0.2 / 0.7  # correlation coefficient* sd(return) / sd(D-factor score)
+  beta_interaction <- -0.01  # From previous RTG studies we ran 
+  
+  return <- intercept + 
+            beta_investment * inv_scaled +
+            beta_opponent * (opponent == "volatile") +
+            beta_d_score * rep(d_scores, each = n_rounds * 2) +
+            beta_interaction * inv_scaled * (opponent == "volatile") * rep(d_scores, each = n_rounds * 2) +
+            rtruncnorm(n_part * n_rounds, mean=0, sd=0.1) # adding some noise
+
+  data <- data.frame(
+    participant = rep(1:n_part, each = n_rounds * 2),
+    round = rep(1:(n_rounds * 2), times = n_part),
+    inv_scaled = inv_scaled,
+    opponent = opponent,
+    d_score = rep(d_scores, each = n_rounds * 2),
+    return = return
+  )
+  
+  lmer(return ~ inv_scaled * opponent * d_score + (1|participant), data = data)
+}
+
+# Function to run power analysis
+run_power_analysis <- function(model, nsim = 1000) {
+  # power_analysis <- powerSim(model, nsim = nsim, test = fixed("d_score"))
+  power_analysis <- powerSim(model, nsim = nsim, test = fixed("inv_scaled:opponent:d_score"))
+
+  summary(power_analysis)$mean
+}
+
+# Iterative power analysis
+current_power <- 0
+while(current_power < desired_power) {
+  model <- generate_and_fit(n_participants)
+  current_power <- run_power_analysis(model)
+  
+  cat("Sample size:", n_participants, "Power:", round(current_power, 3), "\n")
+  
+  if(current_power < desired_power) {
+    n_participants <- n_participants + 10
+  }
+}
+
+# Print final results
+cat("\nFinal Results:\n")
+cat("Required sample size:", n_participants, "\n")
+cat("Achieved power:", round(current_power, 3), "\n")
+
+# Calculate confidence interval for power estimate
+ci <- powerSim(model, nsim = 1000, test = fixed("d_score"))
+cat("95% CI for power: [",
+    round(confint(ci)[1], 3), ", ",
+    round(confint(ci)[2], 3), "]\n", sep="")
+
+# Effect size details
+summary_model <- summary(model)
+d_score_effect <- summary_model$coefficients["d_score", "Estimate"]
+d_score_se <- summary_model$coefficients["d_score", "Std. Error"]
+cat("Estimated D-score effect:", round(d_score_effect, 4), "\n")
+cat("Standard error:", round(d_score_se, 4), "\n")
+```
+

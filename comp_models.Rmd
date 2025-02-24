@@ -1,0 +1,922 @@
+---
+title: "comp_models"
+author: "Ismail Guennouni"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+# Depth-of-Planning Model for Trust Game Behavior
+
+## Overview
+This repository implements a computational model of strategic decision-making in repeated trust games, where a trustee infers an investor's hidden trust state and plans multi-step returns. The model formalizes how trustees might balance immediate gains against long-term relationship incentives using a partially observable Markov decision process (POMDP) framework with depth-k planning.
+
+## Key Features
+
+# Depth-of-Planning Model for Repeated Trust Games
+
+## Model Specification
+
+### 1. State Space and Observations
+- **Hidden Investor States**: 
+$$S_t \in \{1(\text{Low}), 2(\text{Medium}), 3(\text{High})\}$$
+- **Investment Emissions**:
+  $$P(I_t|S_t=s) = \mathcal{N}(\mu_s, \sigma^2), \quad \mu = [4, 11, 17], \sigma=3$$
+
+### 2. Trustee Action Space
+- **6 Return Proportion Bins** based on ratio 
+$$r_t = \frac{\text{returned}_t}{3\times\text{investment}_t}$$:
+  $$
+  \begin{aligned}
+  \text{Bin 1: } & [0, 1/6) \\
+  \text{Bin 2: } & [1/6, 1/3) \\
+  \text{Bin 3: } & [1/3, 1/2) \\
+  \text{Bin 4: } & [1/2, 2/3) \\
+  \text{Bin 5: } & [2/3, 5/6) \\
+  \text{Bin 6: } & [5/6, 1]
+  \end{aligned}
+  $$
+
+### 3. Belief Updates
+- **Bayesian Filtering** after observing investment $I_t$:
+  $$
+  b_t(s) \propto P(I_t|S_t=s)b_{t-1}(s)
+  $$
+  
+- **State Transitions** after trustee action $a_t$:
+  $$
+  P(S_{t+1}=s'|S_t=s,\Delta) = \frac{1}{1 + e^{-\alpha\Delta}} \quad (\Delta = 3p_tI_t - I_t)
+  $$
+  
+  where $p_t$ is the midpoint of chosen bin $a_t$
+
+### 4. Depth-$k$ Planning
+**Q-value recursion** for action selection:
+
+$$
+Q_k(b_t,I_t,a_t) = \underbrace{3I_t(1-p_t)}_{\text{Immediate payoff}} + \gamma\mathbb{E}[V_{k-1}(b_{t+1})]
+$$
+
+**Value function**:
+$$
+V_k(b_t) = \max_{a_t} Q_k(b_t,I_t,a_t)
+$$
+
+### 5. Parameter Estimation
+- **Initial Belief**: $b_0 \sim \text{Softmax}(\alpha_{b1}, \alpha_{b2})$
+- **Transition Sensitivity**: $\alpha$ (logistic slope)
+- **Decision Noise**: $\beta$ (softmax temperature)
+- **Game-Specific Parameters**: $\alpha^{(1)}, \beta^{(1)}$ (first game) vs $\alpha^{(2)}, \beta^{(2)}$ (second game)
+
+**Likelihood Function**:
+$$
+\mathcal{L}(\theta) = \prod_{t} P(a_t|b_t,I_t;\theta), \quad \theta = \{\alpha_{b1}, \alpha_{b2}, \alpha^{(1)}, \alpha^{(2)}, \beta^{(1)}, \beta^{(2)}\}
+$$
+
+## Model Fitting
+Estimated via:
+1. Maximum likelihood estimation (MLE)
+2. Nested optimization over planning depths $k \in \{0,1,2,3\}$
+3. Multi-start L-BFGS-B optimization with parameter constraints
+
+## Key Features
+- **Partial Observability**: Belief state updates through Bayesian filtering
+- **Strategic Depth**: Recursive planning up to $k=3$ steps ahead
+- **Adaptive Beliefs**: Trial-by-trial updating of investor state estimates
+- **Individual Differences**: Participant-specific parameters for initial beliefs and decision noise
+
+```{r}
+###############################################################################
+# Depth-of-Planning Model with 6 Binned Return Proportions
+# (Bins based on ratio = returned / (3*investment))
+###############################################################################
+
+library(stats)  # for optim, etc.
+
+#############################
+# 0. Helper: Binning the Return
+#############################
+#
+# We define cut points to map proportion p into {1..6}:
+#   Bin 1: [0, 1/6)
+#   Bin 2: [1/6, 1/3)
+#   Bin 3: [1/3, 1/2)
+#   Bin 4: [1/2, 2/3)
+#   Bin 5: [2/3, 5/6)
+#   Bin 6: [5/6, 1] (top bin includes p=1)
+#
+# We'll store them as boundaries:
+bin_breaks <- c(0, 1/6, 1/3, 1/2, 2/3, 5/6, 1.0000001)  # 1.0000001 to include p=1
+# We'll also define bin labels 1..6:
+bin_labels <- 1:6
+
+# For convenience, define midpoints to interpret each bin's "representative p":
+proportion_midpoints <- c(1/12, 1/4, 5/12, 7/12, 3/4, 11/12)
+
+
+# A function to bin a single row's returned + investment into an integer 1..6
+bin_return_proportion <- function(returned, invested) {
+  if (invested <= 0) {
+    # by definition, can't return > 0 if investment=0
+    # so force bin=1
+    return(1L)
+  }
+  # else compute proportion
+  p <- returned / (3 * invested)
+  # clamp p to [0,1]
+  if (p < 0) p <- 0
+  if (p > 1) p <- 1
+  
+  # use cut() to find which bin
+  # note: right=FALSE => intervals like [start, end)
+  # but we used 1.0000001 for last break so p=1 goes into bin 6
+  b <- cut(p, breaks=bin_breaks, labels=bin_labels, right=FALSE, include.lowest=TRUE)
+  as.integer(b)
+}
+
+#############################
+# 1. Preprocessing final_data
+#############################
+# We'll define a function to add a "return_bin" column to your final_data.
+preprocess_data <- function(df) {
+  # For each row, we compute a bin
+  df$return_bin <- mapply(bin_return_proportion, df$return, df$investment)
+  return(df)
+}
+
+
+#############################
+# 2. Emission Probability
+#############################
+# Three states => means = c(4, 11, 17), stdev=3
+emission_prob <- function(I_obs, state, sigma=3) {
+  mu <- c(4, 11, 17)
+  dnorm(I_obs, mean=mu[state], sd=sigma)
+}
+
+#############################
+# 3. Transition Probability
+#############################
+logistic <- function(x) 1 / (1 + exp(-x))
+
+transition_prob <- function(s_next, s_current, delta, alpha) {
+  p <- 0
+  # s=1
+  if (s_current == 1) {
+    if (delta > 0) {
+      p_up <- logistic(alpha*delta)
+      if (s_next == 2) p <- p_up
+      if (s_next == 1) p <- 1 - p_up
+    } else {
+      # delta<=0 => remain in 1
+      if (s_next == 1) p <- 1
+    }
+  }
+  # s=2
+  if (s_current == 2) {
+    if (delta > 0) {
+      p_up <- logistic(alpha*delta)
+      if (s_next == 3) p <- p_up
+      if (s_next == 2) p <- 1 - p_up
+    } else if (delta < 0) {
+      p_down <- logistic(alpha*(-delta))
+      if (s_next == 1) p <- p_down
+      if (s_next == 2) p <- 1 - p_down
+    } else {
+      # delta=0 => stay in 2
+      if (s_next == 2) p <- 1
+    }
+  }
+  # s=3
+  if (s_current == 3) {
+    if (delta < 0) {
+      p_down <- logistic(alpha*(-delta))
+      if (s_next == 2) p <- p_down
+      if (s_next == 3) p <- 1 - p_down
+    } else {
+      # delta>=0 => stay in 3
+      if (s_next == 3) p <- 1
+    }
+  }
+  p
+}
+```
+
+```{r}
+#############################
+# 4. Belief Updates
+#############################
+update_belief_after_invest <- function(b_prev, I_obs, sigma=3) {
+    # Purpose:
+  #   When a new investment I_obs is observed from the investor,
+  #   the trustee updates its belief over which latent state (1..3) the investor is in.
+  #
+  #   We do this via "Bayes rule" in an HMM:
+  #     b_post(s) ~ b_prev(s)*P(I_obs|s)
+  #   then normalized so sum_s b_post(s)=1.
+  #
+  # Args:
+  #   b_prev: the prior belief distribution (vector of length 3).
+  #   I_obs: the observed investment this round.
+  #   sigma: stdev used in emission_prob (normal distribution).
+  #
+  # Steps:
+  #   1) For each state s=1..3, compute "unnorm[s]" = b_prev[s]* emission_prob(I_obs, s).
+  #   2) sum all unnorm[s] to get 'denom'.
+  #   3) define b_post[s] = unnorm[s]/denom for each s.
+  #
+  unnorm <- numeric(3)
+  for (s in 1:3) {
+    unnorm[s] <- b_prev[s]* emission_prob(I_obs, s, sigma)
+  }
+  denom <- sum(unnorm)
+  if (denom < 1e-12) denom <- 1e-12
+  b_post <- unnorm / denom
+  b_post
+}
+
+update_belief_after_action <- function(b_t, I_t, action_idx, alpha) {
+    # Purpose:
+  #   After the trustee picks an action (one of 6 proportion-bins),
+  #   the investor transitions to a new latent state with some probability
+  #   that depends on delta=(returned - I_t). We update the trustee's belief
+  #   about the new state accordingly.
+  #
+  # Args:
+  #   b_t:       belief distribution over states at the *current* time.
+  #   I_t:       the investor's current investment (which determines how much trustee has).
+  #   action_idx: which bin (1..6) the trustee chose. Each bin corresponds to a midpoint proportion p.
+  #   alpha:     logistic sensitivity parameter for state transitions.
+
+  p <- proportion_midpoints[action_idx]
+  returned <- 3*I_t*p
+  delta <- returned - I_t  # = I_t*(3p -1)
+  
+  b_next <- numeric(3)
+  for (s_next in 1:3) {
+    sum_s <- 0
+    for (s_cur in 1:3) {
+      # Weighted by b_t[s_cur] => probability we were in s_cur,
+      # times the probability to transition from s_cur to s_next
+      # given the computed delta and alpha.
+      sum_s <- sum_s + b_t[s_cur]* transition_prob(s_next, s_cur, delta, alpha)
+    }
+    b_next[s_next] <- sum_s
+  }
+  denom <- sum(b_next)
+  if (denom<1e-12) denom <- 1e-12
+  b_next <- b_next/denom
+  b_next
+}
+
+#############################
+# 5. Immediate Payoff
+#############################
+# payoff = 3*I_t - returned = 3*I_t(1-p)
+immediate_payoff <- function(I_t, action_idx) {
+  p <- proportion_midpoints[action_idx]
+  3*I_t*(1 - p)
+}
+
+```
+
+```{r}
+#############################
+# 6. Depth-k Q-values
+#############################
+# We'll do a simpler "average next invest" approach for lookahead
+compute_Qvalues_k <- function(b, I_t, H, k, alpha, beta, gamma, sigma_emission=3) {
+  # Purpose:
+  #   Computes the *Q-values* for each of the 6 possible bins (actions)
+  #   given the trustee's current belief 'b', current investor investment I_t,
+  #   horizon H (rounds remaining), and planning depth k.
+  #
+  #   Q(a) represents the "value" (expected return) if the trustee chooses action a 
+  #   at this point, under a depth-k planning approach. The trustee then picks among
+  #   these Q(a) using softmax.
+  
+  
+  # If k=0 => myopic:
+  if (H<=0 || k<=0) {
+    Q <- numeric(length(proportion_midpoints))
+    for (a_idx in seq_along(proportion_midpoints)) {
+      Q[a_idx] <- immediate_payoff(I_t, a_idx)
+    }
+    return(Q)
+  }
+  
+  Q <- numeric(length(proportion_midpoints))
+  mu_states <- c(4, 11, 17)  # average invests for s=1..3
+  
+  for (a_idx in seq_along(proportion_midpoints)) {
+    # immediate payoff
+    im_r <- immediate_payoff(I_t, a_idx)
+    
+    # next belief
+    b_next <- update_belief_after_action(b, I_t, a_idx, alpha)
+    
+    # approximate next invest => sum_{s'} b_next[s']* mu[s']
+    I_next <- sum(b_next * mu_states)
+    
+    # belief after seeing I_next
+    b_afterI <- update_belief_after_invest(b_next, I_next, sigma_emission)
+    
+    # recursion
+    Q_next <- compute_Qvalues_k(b_afterI, I_next, H-1, k-1, alpha, beta, gamma, sigma_emission)
+    V_next <- max(Q_next)
+    
+    Q[a_idx] <- im_r + gamma*V_next
+  }
+  Q
+}
+
+softmax <- function(qvals, beta) {
+  ex <- exp(qvals/beta)
+  ex / sum(ex)
+}
+
+```
+
+```{r}
+# 
+# #############################
+# # 7. Neg Log-Likelihood for One Participant + k
+# #############################
+# compute_neg_log_lik_for_participant <- function(par, df_sub, k) {
+#   # This function computes the negative log-likelihood (NLL) of observing
+#   # a single participant's sequence of choices, given:
+#   #   (1) A parameter vector 'par' = c(alpha_b1, alpha_b2, alpha, beta),
+#   #   (2) That participant's data 'df_sub' (with columns like investment, return_bin),
+#   #   (3) A specified depth-of-planning integer 'k'.
+#   #
+#   # The model is a partially observable repeated trust game, where:
+#   #   - The participant (trustee) infers the investor's hidden state (Low/Med/High).
+#   #   - The trustee's action is one of 6 bins for proportion returned.
+#   #   - 'par' includes:
+#   #       alpha_b1, alpha_b2: parameters that define the trustee's initial belief over states
+#   #                           (converted to a 3-state probability via a softmax transform).
+#   #       alpha: a single logistic "sensitivity" parameter that governs how delta (net return) affects transitions to the next investor state.
+#   #       beta: softmax temperature for how the trustee picks an action from Q-values.
+#   #   - 'k': the planning depth (0..4).
+#   # par = c(alpha_b1, alpha_b2, alpha, beta)
+#   alpha_b1 <- par[1]
+#   alpha_b2 <- par[2]
+#   alpha_tr <- par[3]
+#   beta_    <- par[4]
+#   gamma_   <- 1.0
+#   sigma_emission <- 3
+#   
+#   # Convert alpha_b1, alpha_b2 => initial belief distribution b_init(1..3)
+#   denom <- 1 + exp(alpha_b1) + exp(alpha_b2)
+#   b_init <- c( exp(alpha_b1)/denom, exp(alpha_b2)/denom, 0 )
+#   b_init[3] <- 1 - b_init[1] - b_init[2]
+#   
+#   neg_log_lik <- 0
+#   
+#   for (g in unique(df_sub$gameNum.f)) {
+#     df_game <- df_sub[df_sub$gameNum.f == g, ]
+#     df_game <- df_game[order(df_game$roundNum), ]
+#     T_game  <- nrow(df_game)
+#     
+#     b_current <- b_init
+#     
+#     for (t in seq_len(T_game)) {
+#       I_t <- df_game$investment[t]
+#       
+#       # 1) Belief update after seeing investor's investment I_t
+#       b_current <- update_belief_after_invest(b_current, I_t, sigma_emission)
+#       
+#       # 2) Depth-k planning => Q-values for all 6 bins
+#       H_left <- T_game - t + 1
+#       Qvals <- compute_Qvalues_k(b_current, I_t, H_left, k, alpha_tr, beta_, gamma_, sigma_emission)
+#       p_actions <- softmax(Qvals, beta_)
+#       
+#       # 3) Observed bin in data
+#       a_obs <- df_game$return_bin[t]
+#       
+#       # If I_t=0 => we expect a_obs=1. If not, small probability => penalize LL
+#       if (I_t == 0 && a_obs != 1) {
+#         neg_log_lik <- neg_log_lik - log(1e-12)
+#       } else {
+#         p_chosen <- if (a_obs>=1 && a_obs<=6) p_actions[a_obs] else 1e-12
+#         if (p_chosen < 1e-12) p_chosen <- 1e-12
+#         neg_log_lik <- neg_log_lik - log(p_chosen)
+#       }
+#       
+#       # 4) Update belief after the chosen action
+#       b_current <- update_belief_after_action(b_current, I_t, a_obs, alpha_tr)
+#     }
+#   }
+#   
+#   neg_log_lik
+# }
+```
+
+```{r}
+# #############################
+# # 8. Fit Single Participant (Loop over k=0..4)
+# #############################
+# fit_model_for_participant <- function(df_sub, max_k=3) {
+#   best_k   <- NA
+#   best_nll <- Inf
+#   best_par <- NULL
+#   
+#   # Let’s add a message so we know we started fitting this participant:
+#   cat("---- Fitting participant:", unique(df_sub$player_index), "----\n")
+#   
+#   for (k_try in 0:max_k) {
+#     cat("  Trying k =", k_try, "\n")   # progress message
+#     
+#     obj_fn <- function(par) {
+#       compute_neg_log_lik_for_participant(par, df_sub, k_try)
+#     }
+#   
+#     init_par  <- c(0,0,0.5,0.5) # alpha_b1, alpha_b2, alpha, beta
+#     lower_par <- c(-5, -5, 0,  0)
+#     upper_par <- c( 5,  5,  5,  5)
+#     
+#     res <- optim(par=init_par, fn=obj_fn, method="L-BFGS-B",
+#                  lower=lower_par, upper=upper_par,
+#                  control = list(maxit = 1000,parscale = c(1, 1, 1, 1)))
+#     if (res$value < best_nll) {
+#       best_nll <- res$value
+#       best_k   <- k_try
+#       best_par <- res$par
+#     }
+#   }
+#   
+#   list(k=best_k, par=best_par, nll=best_nll)
+# }
+# 
+
+```
+
+
+# new code to fit some parameters separately for each game: 
+```{r}
+#############################
+# 7. Neg Log-Likelihood for One Participant + k
+#############################
+compute_neg_log_lik_for_participant <- function(par, df_sub, k) {
+  # Now 'par' has 6 elements: 
+  #  c(alpha_b1, alpha_b2, alpha_tr_game1, beta_game1, alpha_tr_game2, beta_game2)
+  #
+  # alpha_b1, alpha_b2 => define initial belief over states, shared across both games.
+  # alpha_tr_game1, beta_game1 => logistic transition + softmax temp for game 1
+  # alpha_tr_game2, beta_game2 => logistic transition + softmax temp for game 2
+  #
+  alpha_b1        <- par[1]
+  alpha_b2        <- par[2]
+  alpha_tr_game1  <- par[3]
+  beta_game1      <- par[4]
+  alpha_tr_game2  <- par[5]
+  beta_game2      <- par[6]
+  
+  gamma_          <- 1.0
+  sigma_emission  <- 3
+  
+  # Convert alpha_b1, alpha_b2 => initial belief distribution b_init(1..3)
+  denom <- 1 + exp(alpha_b1) + exp(alpha_b2)
+  b_init <- c(exp(alpha_b1)/denom,
+              exp(alpha_b2)/denom,
+              0)
+  b_init[3] <- 1 - b_init[1] - b_init[2]
+  
+  neg_log_lik <- 0
+  
+  # We'll handle each game separately, but use game-specific alpha_tr / beta
+  for (g in unique(df_sub$gameNum.f)) {
+    df_game <- df_sub[df_sub$gameNum.f == g, ]
+    df_game <- df_game[order(df_game$roundNum), ]
+    T_game  <- nrow(df_game)
+    
+    # Decide which alpha_tr / beta to use based on the game label
+    if (g == "first game") {
+      alpha_tr <- alpha_tr_game1
+      beta_    <- beta_game1
+    } else if (g == "second game") {
+      alpha_tr <- alpha_tr_game2
+      beta_    <- beta_game2
+    } else {
+      stop(paste("Unrecognized game label:", g))
+    }
+    
+    # Reset belief to b_init at start of each game
+    b_current <- b_init
+    
+    # Now loop over rounds for that game
+    for (t in seq_len(T_game)) {
+      I_t <- df_game$investment[t]
+      
+      # 1) Belief update after seeing investor's investment I_t
+      b_current <- update_belief_after_invest(b_current, I_t, sigma_emission)
+      
+      # 2) Depth-k planning => Q-values for all 6 bins
+      H_left <- T_game - t + 1
+      Qvals <- compute_Qvalues_k(b_current, I_t, H_left, k,
+                                 alpha_tr, beta_, gamma_, sigma_emission)
+      p_actions <- softmax(Qvals, beta_)
+      
+      # 3) Observed bin in data
+      a_obs <- df_game$return_bin[t]
+      
+      # If I_t=0 => we expect a_obs=1. If not, small probability => penalize LL
+      if (I_t == 0 && a_obs != 1) {
+        neg_log_lik <- neg_log_lik - log(1e-12)
+      } else {
+        p_chosen <- if (a_obs >=1 && a_obs <=6) p_actions[a_obs] else 1e-12
+        if (p_chosen < 1e-12) p_chosen <- 1e-12
+        neg_log_lik <- neg_log_lik - log(p_chosen)
+      }
+      
+      # 4) Update belief after the chosen action
+      b_current <- update_belief_after_action(b_current, I_t, a_obs, alpha_tr)
+    }
+  }
+  
+  neg_log_lik
+}
+```
+
+
+```{r}
+#############################
+# 8. Fit Single Participant (Loop over k=0..4)
+#############################
+fit_model_for_participant <- function(df_sub, max_k=3) {
+  best_k   <- NA
+  best_nll <- Inf
+  best_par <- NULL
+  
+  cat("---- Fitting participant:", unique(df_sub$player_index), "----\n")
+  
+  for (k_try in 0:max_k) {
+    cat("  Trying k =", k_try, "\n")   # progress message
+    
+    obj_fn <- function(par) {
+      compute_neg_log_lik_for_participant(par, df_sub, k_try)
+    }
+    
+    # Now par => c(alpha_b1, alpha_b2, alpha_tr_g1, beta_g1, alpha_tr_g2, beta_g2)
+    # Let's pick some initial values for the new parameters:
+    # alpha_b1=0, alpha_b2=0, alpha_tr_g1=0.5, beta_g1=0.5, alpha_tr_g2=0.5, beta_g2=0.5
+    init_par  <- c(0,   0,   0.5, 0.5, 0.5, 0.5)
+    lower_par <- c(-5, -5,   0,   0,   0,   0)
+    upper_par <- c( 5,  5,   5,   5,   5,   5)
+    
+    res <- optim(par=init_par,
+                 fn=obj_fn,
+                 method="L-BFGS-B",
+                 lower=lower_par,
+                 upper=upper_par,
+                 control = list(maxit = 1000,
+                                parscale = c(1,1,1,1,1,1)))
+    
+    if (res$value < best_nll) {
+      best_nll <- res$value
+      best_k   <- k_try
+      best_par <- res$par
+    }
+  }
+  
+  list(k=best_k, par=best_par, nll=best_nll)
+}
+
+```
+
+```{r}
+###############################################################################
+# Fit the depth-of-planning model to *only* the first participant in final_data
+###############################################################################
+
+# 1) Preprocess final_data to add return_bin
+df_preprocessed <- preprocess_data(final_data)
+
+# 2) Identify the "first participant" ID
+first_pid <- unique(df_preprocessed$playerId)[42]
+
+# 3) Extract rows for that participant
+df_first <- subset(df_preprocessed, playerId == first_pid)
+
+# 4) Fit the model to that participant
+#    This will loop over k=0..4 internally and optimize other parameters.
+result_first <- fit_model_for_participant(df_first, max_k=2)
+
+# 5) Inspect the result
+#    This list typically contains: $k, $par, and $nll
+print(result_first)
+
+```
+
+
+```{r}
+library(parallel)
+library(pbapply)
+
+fit_all_participants_parallel <- function(data, max_k,n_cores = 8) {
+  # 1) Preprocess => add return_bin
+  df_prep <- preprocess_data(data)
+  
+  # 2) Split by participant
+  df_list <- split(df_prep, df_prep$playerId)
+  
+  # 3) Create a cluster of n_cores
+  cl <- makeCluster(n_cores)
+  
+  # 4) Export any needed variables or functions to the cluster
+  #    (If your helper functions are in the global environment, you need to export them)
+  clusterExport(cl, c("fit_model_for_participant",
+                      "compute_neg_log_lik_for_participant",
+                      "update_belief_after_invest",
+                      "update_belief_after_action",
+                      "compute_Qvalues_k",
+                      "immediate_payoff",
+                      "transition_prob",
+                      "emission_prob",
+                      "logistic",
+                      "softmax",
+                      "proportion_midpoints",
+                      "bin_return_proportion",
+                      "preprocess_data"
+
+  ))
+  
+
+  # 6) Use parLapply to fit each participant in parallel
+  results_list <- pblapply(df_list, 
+                           function(data) fit_model_for_participant(data, max_k), 
+                           cl = cl)
+  
+  
+  # 7) Stop the cluster
+  stopCluster(cl)
+  
+  return(results_list)
+}
+```
+
+```{r}
+# fit_all_participants_parallel <- function(data, max_k, n_cores = 8) {
+#     # 1) Preprocess => add return_bin
+#     df_prep <- preprocess_data(data)
+#     
+#     # 2) Split by participant
+#     df_list <- split(df_prep, df_prep$playerId)
+#     
+#     # 3) Create a cluster of n_cores
+#     cl <- makeCluster(n_cores)
+#     
+#     # 4) Export needed functions
+#     clusterExport(cl, c("fit_model_for_participant",
+#                        "compute_neg_log_lik_for_participant",
+#                        "update_belief_after_invest",
+#                        "update_belief_after_action", 
+#                        "compute_Qvalues_k",
+#                        "immediate_payoff",
+#                        "transition_prob",
+#                        "emission_prob",
+#                        "logistic",
+#                        "softmax",
+#                        "proportion_midpoints",
+#                        "bin_return_proportion",
+#                        "preprocess_data"))
+#     
+#     # 5) Wrapper function with error handling
+#     safe_wrapper <- function(data) {
+#         participant_id <- data$playerId[1]
+#         tryCatch({
+#             # Try to fit the model
+#             result <- fit_model_for_participant(data, max_k)
+#             
+#             # Convert successful result to data frame row
+#             data.frame(
+#                 playerId = participant_id,
+#                 k = result$k,
+#                 alpha_b1 = result$par[1],
+#                 alpha_b2 = result$par[2],
+#                 senst_pomdp = result$par[3],
+#                 temp_pomdp = result$par[4],
+#                 nll = result$nll,
+#                 convergence = TRUE,
+#                 error = NA_character_,
+#                 stringsAsFactors = FALSE
+#             )
+#         },
+#         error = function(e) {
+#             # Return error information in same format
+#             cat("E")  # Error indicator
+#             data.frame(
+#                 playerId = participant_id,
+#                 k = NA_real_,
+#                 alpha_b1 = NA_real_,
+#                 alpha_b2 = NA_real_,
+#                 senst_pomdp = NA_real_,
+#                 temp_pomdp = NA_real_,
+#                 nll = NA_real_,
+#                 convergence = FALSE,
+#                 error = as.character(e),
+#                 stringsAsFactors = FALSE
+#             )
+#         })
+#     }
+#     
+#     # 6) Run parallel processing with progress indication
+#     results_list <- parLapply(cl, df_list, safe_wrapper)
+#     cat("\n")
+#     
+#     # 7) Stop cluster
+#     stopCluster(cl)
+#     
+#     # 8) Combine results into single data frame
+#     results_df <- do.call(rbind, results_list)
+#     
+#     # 9) Add summary information
+#     n_total <- nrow(results_df)
+#     n_converged <- sum(results_df$convergence)
+#     n_errors <- sum(!results_df$convergence)
+#     
+#     cat("\nFitting complete!\n")
+#     cat(sprintf("Total participants: %d\n", n_total))
+#     cat(sprintf("Successfully converged: %d\n", n_converged))
+#     cat(sprintf("Failed to converge: %d\n", n_errors))
+#     
+#     if(n_errors > 0) {
+#         cat("\nError summary:\n")
+#         error_summary <- table(results_df$error[!results_df$convergence])
+#         print(error_summary)
+#     }
+#     
+#     # 10) Add additional metadata
+#     results_df$fit_timestamp <- Sys.time()
+#     results_df$max_k <- max_k
+#     
+#     return(results_df)
+# }
+```
+
+```{r}
+fit_all_participants_parallel <- function(data, max_k, n_cores = 8) {
+    # 1) Preprocess => add return_bin
+    df_prep <- preprocess_data(data)
+    
+    # 2) Split by participant
+    df_list <- split(df_prep, df_prep$playerId)
+    
+    # 3) Create a cluster of n_cores
+    cl <- makeCluster(n_cores)
+    
+    # 4) Export needed functions
+    clusterExport(cl, c("fit_model_for_participant",
+                       "compute_neg_log_lik_for_participant",
+                       "update_belief_after_invest",
+                       "update_belief_after_action", 
+                       "compute_Qvalues_k",
+                       "immediate_payoff",
+                       "transition_prob",
+                       "emission_prob",
+                       "logistic",
+                       "softmax",
+                       "proportion_midpoints",
+                       "bin_return_proportion",
+                       "preprocess_data"))
+    
+    # 5) Wrapper function with error handling
+    safe_wrapper <- function(data) {
+        participant_id <- data$playerId[1]
+        tryCatch({
+            # Try to fit the model (which now expects 6 parameters
+            # if you've modified 'fit_model_for_participant' accordingly)
+            result <- fit_model_for_participant(data, max_k)
+            
+            # Convert successful result to data frame row
+            # NOTE: We now assume 'result$par' has length 6:
+            #   (alpha_b1, alpha_b2, alpha_tr_g1, beta_g1, alpha_tr_g2, beta_g2)
+            data.frame(
+                playerId = participant_id,
+                k = result$k,
+                
+                # Store the 6 fitted parameters in clear columns
+                alpha_b1    = result$par[1],
+                alpha_b2    = result$par[2],
+                alpha_tr_g1 = result$par[3],
+                beta_g1     = result$par[4],
+                alpha_tr_g2 = result$par[5],
+                beta_g2     = result$par[6],
+                
+                nll         = result$nll,
+                convergence = TRUE,
+                error       = NA_character_,
+                stringsAsFactors = FALSE
+            )
+        },
+        error = function(e) {
+            # Return error information in same format
+            cat("E")  # Error indicator
+            data.frame(
+                playerId = participant_id,
+                k = NA_real_,
+                
+                alpha_b1    = NA_real_,
+                alpha_b2    = NA_real_,
+                alpha_tr_g1 = NA_real_,
+                beta_g1     = NA_real_,
+                alpha_tr_g2 = NA_real_,
+                beta_g2     = NA_real_,
+                
+                nll = NA_real_,
+                convergence = FALSE,
+                error = as.character(e),
+                stringsAsFactors = FALSE
+            )
+        })
+    }
+    
+    # 6) Run parallel processing with progress indication
+    results_list <- parLapply(cl, df_list, safe_wrapper)
+    cat("\n")
+    
+    # 7) Stop cluster
+    stopCluster(cl)
+    
+    # 8) Combine results into single data frame
+    results_df <- do.call(rbind, results_list)
+    
+    # 9) Add summary information
+    n_total <- nrow(results_df)
+    n_converged <- sum(results_df$convergence)
+    n_errors <- sum(!results_df$convergence)
+    
+    cat("\nFitting complete!\n")
+    cat(sprintf("Total participants: %d\n", n_total))
+    cat(sprintf("Successfully converged: %d\n", n_converged))
+    cat(sprintf("Failed to converge: %d\n", n_errors))
+    
+    if(n_errors > 0) {
+        cat("\nError summary:\n")
+        error_summary <- table(results_df$error[!results_df$convergence])
+        print(error_summary)
+    }
+    
+    # 10) Add additional metadata
+    results_df$fit_timestamp <- Sys.time()
+    results_df$max_k <- max_k
+    
+    return(results_df)
+}
+
+```
+
+
+```{r}
+#############################
+# 10. Example Usage
+#############################
+
+
+results_pomdp <- fit_all_participants_parallel(final_data, max_k=3, n_cores = 8)
+str(results_pomdp)  # see each participant's fit
+
+# results is a named list, each entry has:
+  # $k   = best-fitting planning depth
+  # $par = c(alpha_b1, alpha_b2, senst_pomdp, temp_pomdp)
+  # $nll = negative log-likelihood
+
+write.csv(results_pomdp, "results_pomdp.csv", row.names = FALSE)
+
+```
+
+
+```{r}
+###########################################
+# 1. Analyze Planning Model Results
+###########################################
+analyze_planning_results <- function(planning_results) {
+    # Plot distribution of k
+    k_plot <- ggplot(planning_results, aes(x = factor(k))) +
+        geom_bar() +
+        labs(title = "Distribution of Planning Depth (k)",
+             x = "Planning Depth",
+             y = "Count") +
+        theme_minimal()
+    
+    # Summary statistics of parameters
+    param_summary <- planning_results %>%
+        summarise(across(c(k, alpha_b1, alpha_b2, alpha_tr_g1, beta_g1,alpha_tr_g2, beta_g2), 
+                        list(mean = mean, sd = sd, median = median),
+                        na.rm = TRUE))
+    
+    return(list(k_plot = k_plot, param_summary = param_summary))
+}
+
+
+analyze_planning_results(results_pomdp)
+
+```
+
+
+

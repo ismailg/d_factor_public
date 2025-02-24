@@ -1,0 +1,644 @@
+---
+title: "pomdp_plan_new"
+author: "Ismail Guennouni"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This POMDP model assumes that the trustee is trying to solve a partially observable
+Markov decision process (POMDP) by maintaining a belief over the investor’s latent state.
+
+• It updates beliefs about the investor based on observed investments (using a likelihood
+  computed via a normal emission model) and further updates belief after taking an action
+  via a transition probability function (which is defined consistently with the hybrid model).
+
+• It then performs depth-k planning (via compute_Qvalues_k) to compute Q–values for each
+  possible action (6 bins for return proportions) and uses a softmax decision rule.
+
+Compared to:
+  - The pure model–free agent, which learns action values incrementally without an internal
+    model of the investor’s latent state.
+  - The hybrid model, which combines model–free learning and model–based planning.
+
+This pure POMDP model explicitly represents uncertainty (belief over states) and uses
+planning based on that belief. Its parameters include those governing the initial belief
+(alpha_b1, alpha_b2) and those governing the transition dynamics and softmax temperature
+separately for each game.
+
+Critically, if you set the planning depth k to 0, the model becomes myopic (ignoring future
+consequences), and if you set k=1 and the belief updates are ignored, it might be conceptually
+equivalent to a one–step hybrid model with w=1. However, this POMDP model allows for
+explicit belief updating and planning over multiple steps, potentially capturing more complex
+inference and planning behavior.
+
+Its additional complexity (more parameters and belief updates) may allow it to better explain
+behavior if participants indeed track uncertainty about the investor’s state. However, it may
+also risk overfitting relative to simpler models if such sophisticated planning is not actually used.
+
+###############################################################################
+# 1) Libraries
+###############################################################################
+
+```{r}
+
+library(tidyverse)
+library(optimx)
+library(lhs)
+library(parallel)
+library(pbapply)
+```
+
+
+
+###############################################################################
+# 2) Basic Helper Functions and Consistency with the Hybrid Model
+###############################################################################
+```{r}
+# Convert investor's investment into 3 discrete bins: {1=Low, 2=Med, 3=High}
+get_investment_bin <- function(investment) {
+  if (investment <= 7)   return(1)  # Low
+  if (investment <= 14)  return(2)  # Medium
+  return(3)                        # High
+}
+
+# Convert trustee's return proportion (0..1) into 6 bins
+get_return_bin <- function(return_prop) {
+  if (return_prop < 0 || return_prop > 1) {
+    stop("Return proportion must be between 0 and 1.")
+  }
+  # Bins: 1..6 (with 1 representing 0 to <1/6, etc.)
+  return(min(floor(return_prop * 6) + 1, 6))
+}
+
+# Calculate actual monetary payoffs for the trustee and investor
+calculate_payoffs <- function(investment, return_amount) {
+  trustee_payoff  <- 3 * investment - return_amount
+  investor_payoff <- return_amount - investment
+  list(trustee = trustee_payoff, investor = investor_payoff)
+}
+
+# Fehr–Schmidt utility
+calculate_fs_utility <- function(own_payoff, other_payoff, envy, guilt) {
+  disadv_inequity <- max(other_payoff - own_payoff, 0)
+  adv_inequity    <- max(own_payoff - other_payoff, 0)
+  own_payoff - envy * disadv_inequity - guilt * adv_inequity
+}
+
+# Priors (if needed)
+get_literature_priors <- function() {
+  list(
+    means = c(
+      envy = 2.0, guilt = 0.5, 
+      temp_game1 = 5.0, temp_game2 = 5.0,
+      sensitivity_game1 = 0.5, sensitivity_game2 = 0.5,
+      alpha_Q_game1 = 0.3, alpha_Q_game2 = 0.3, 
+      w = 0.5
+    ),
+    sds = c(
+      envy = 1.0, guilt = 0.3,
+      temp_game1 = 2.0, temp_game2 = 2.0,
+      sensitivity_game1 = 0.3, sensitivity_game2 = 0.3,
+      alpha_Q_game1 = 0.2, alpha_Q_game2 = 0.2,
+      w = 0.2
+    )
+  )
+}
+
+# Forward simulation helpers
+bin_to_investment <- function(s_bin) {
+  if (s_bin == 1) return(4)    # Low
+  if (s_bin == 2) return(11)   # Medium
+  if (s_bin == 3) return(17)   # High
+  stop("Invalid s_bin in bin_to_investment()")
+}
+
+bin_to_return_prop <- function(a_bin) {
+  # Return the midpoint of the bin.
+  return((2 * a_bin - 1) / 12)
+}
+
+fs_payoff_state_action <- function(s_bin, a_bin, envy, guilt) {
+  inv  <- bin_to_investment(s_bin)
+  prop <- bin_to_return_prop(a_bin)
+  ret  <- round(prop * (3 * inv))
+  
+  trustee_payoff  <- 3 * inv - ret
+  investor_payoff <- ret - inv
+  
+  disadv <- max(investor_payoff - trustee_payoff, 0)
+  adv <- max(trustee_payoff - investor_payoff, 0)
+  u <- trustee_payoff - envy * disadv - guilt * adv
+  return(u)
+}
+
+###############################################################################
+# 3A) Additional Helper: Preprocess Data to Add Return Bin
+###############################################################################
+# This function adds a column 'return_bin' computed as:
+# return_bin = get_return_bin(return/(3*investment))
+add_return_bin <- function(df) {
+  df$return_bin <- mapply(function(ret, invest) {
+    # If investment is zero, assign bin 1 by default
+    if (invest <= 0) return(1L)
+    get_return_bin(ret / (3 * invest))
+  }, df$return, df$investment)
+  df
+}
+```
+
+```{r}
+###############################################################################
+# 3B) Belief Update Functions (Same as in the Hybrid Model)
+###############################################################################
+update_belief_after_invest <- function(b_prev, I_obs, sigma=3) {
+  unnorm <- numeric(3)
+  for (s in 1:3) {
+    unnorm[s] <- b_prev[s] * dnorm(I_obs, mean = c(4, 11, 17)[s], sd = sigma)
+  }
+  denom <- sum(unnorm)
+  if (denom < 1e-12) denom <- 1e-12
+  unnorm / denom
+}
+
+update_belief_after_action <- function(b_t, I_t, action_idx, alpha) {
+  # Using the same logic as before, with proportion midpoints:
+  p <- bin_to_return_prop(action_idx)
+  returned <- 3 * I_t * p
+  delta <- returned - I_t  # = I_t*(3p -1)
+  b_next <- numeric(3)
+  for (s_next in 1:3) {
+    sum_s <- 0
+    for (s_cur in 1:3) {
+      sum_s <- sum_s + b_t[s_cur] * transition_prob(s_next, s_cur, delta, alpha)
+    }
+    b_next[s_next] <- sum_s
+  }
+  denom <- sum(b_next)
+  if (denom < 1e-12) denom <- 1e-12
+  b_next / denom
+}
+
+###############################################################################
+# 3C) Belief-Free Simulation Helpers for Planning (Same as before)
+###############################################################################
+immediate_payoff <- function(I_t, action_idx) {
+  p <- bin_to_return_prop(action_idx)
+  3 * I_t * (1 - p)
+}
+
+softmax <- function(qvals, beta) {
+  ex <- exp(qvals / beta)
+  ex / sum(ex)
+}
+
+compute_Qvalues_k <- function(b, I_t, H, k, alpha, beta, gamma, sigma_emission=3) {
+  # If no lookahead, return immediate payoffs
+  if (H <= 0 || k <= 0) {
+    Q <- numeric(6)
+    for (a in 1:6) {
+      Q[a] <- immediate_payoff(I_t, a)
+    }
+    return(Q)
+  }
+  Q <- numeric(6)
+  mu_states <- c(4, 11, 17)
+  for (a in 1:6) {
+    im_r <- immediate_payoff(I_t, a)
+    b_next <- update_belief_after_action(b, I_t, a, alpha)
+    I_next <- sum(b_next * mu_states)
+    b_afterI <- update_belief_after_invest(b_next, I_next, sigma_emission)
+    Q_next <- compute_Qvalues_k(b_afterI, I_next, H - 1, k - 1, alpha, beta, gamma, sigma_emission)
+    V_next <- max(Q_next)
+    Q[a] <- im_r + gamma * V_next
+  }
+  Q
+}
+
+```
+
+
+###############################################################################
+# 4) Offline POMDP Model via Depth-k Planning
+###############################################################################
+
+```{r}
+
+# Here the trustee is assumed to solve a POMDP:
+# It maintains a belief (over 3 states) and, for each round, computes Q-values
+# using depth-k planning (via compute_Qvalues_k). Decisions are generated using softmax.
+# The parameter vector (length = 6) is:
+#    par = c(alpha_b1, alpha_b2, alpha_tr_game1, beta_game1, alpha_tr_game2, beta_game2)
+#
+#   - alpha_b1, alpha_b2: determine the initial belief over states via softmax:
+#       b_init = [exp(alpha_b1), exp(alpha_b2), 1] normalized.
+#   - alpha_tr_game1, beta_game1: govern belief updating and softmax temperature for game 1.
+#   - alpha_tr_game2, beta_game2: same for game 2.
+#
+# The negative log-likelihood is computed by iterating over rounds within each game.
+compute_neg_log_lik_for_participant <- function(par, df_sub, k) {
+  # par: vector of 6 parameters:
+  # (alpha_b1, alpha_b2, alpha_tr_game1, beta_game1, alpha_tr_game2, beta_game2)
+  alpha_b1        <- par[1]
+  alpha_b2        <- par[2]
+  alpha_tr_game1  <- par[3]
+  beta_game1      <- par[4]
+  alpha_tr_game2  <- par[5]
+  beta_game2      <- par[6]
+  
+  gamma_ <- 1.0
+  sigma_emission <- 3
+  
+  # Compute initial belief from alpha_b1 and alpha_b2:
+  denom <- 1 + exp(alpha_b1) + exp(alpha_b2)
+  b_init <- c(exp(alpha_b1) / denom,
+              exp(alpha_b2) / denom,
+              1 - exp(alpha_b1) / denom - exp(alpha_b2) / denom)
+  
+  neg_log_lik <- 0
+  
+  for (g in unique(df_sub$gameNum.f)) {
+    df_game <- df_sub[df_sub$gameNum.f == g, ]
+    df_game <- df_game[order(df_game$roundNum), ]
+    T_game  <- nrow(df_game)
+    
+    if (g == "first game") {
+      alpha_tr <- alpha_tr_game1
+      beta_     <- beta_game1
+    } else if (g == "second game") {
+      alpha_tr <- alpha_tr_game2
+      beta_     <- beta_game2
+    } else {
+      stop(paste("Unrecognized game label:", g))
+    }
+    
+    b_current <- b_init  # Reset belief at start of each game
+    
+    for (t in seq_len(T_game)) {
+      I_t <- df_game$investment[t]
+      
+      # Update belief based on observed investment.
+      b_current <- update_belief_after_invest(b_current, I_t, sigma_emission)
+      
+      H_left <- T_game - t + 1
+      Qvals <- compute_Qvalues_k(b_current, I_t, H_left, k, alpha_tr, beta_, gamma_, sigma_emission)
+      p_actions <- softmax(Qvals, beta_)
+      
+      # Instead of using a precomputed 'return_bin' column,
+      # compute the observed bin on the fly.
+      # To avoid division by zero, if I_t is 0 (or <=0) assign bin = 1 by default.
+      if (I_t <= 0) {
+        a_obs <- 1L
+      } else {
+        a_obs <- get_return_bin(df_game$return[t] / (3 * I_t))
+      }
+      
+      # Now check for NA in a_obs, and use a small default probability if needed.
+      if (is.na(a_obs)) {
+        p_chosen <- 1e-12
+      } else if (a_obs >= 1 && a_obs <= 6) {
+        p_chosen <- p_actions[a_obs]
+      } else {
+        p_chosen <- 1e-12
+      }
+      
+      # If for any reason p_chosen is NA or extremely low, set it to 1e-12
+      if (is.na(p_chosen) || p_chosen < 1e-12) {
+        p_chosen <- 1e-12
+      }
+      
+      neg_log_lik <- neg_log_lik - log(p_chosen)
+      
+      # Update belief after observing the action
+      b_current <- update_belief_after_action(b_current, I_t, a_obs, alpha_tr)
+    }
+  }
+  
+  neg_log_lik
+}
+
+
+```
+
+
+
+
+```{r}
+###############################################################################
+# 7) Fitting and Test-Split Functions for the POMDP Model
+###############################################################################
+# (a) Fit a single participant (using full training data) and select best planning depth k.
+fit_model_for_participant <- function(df_sub, max_k=3) {
+  best_k <- NA
+  best_nll <- Inf
+  best_par <- NULL
+  
+  # Use playerId from existing column (consistently with other models)
+  cat("---- Fitting participant:", unique(df_sub$playerId), "----\n")
+  
+  for (k_try in 0:max_k) {
+    cat("  Trying k =", k_try, "\n")
+    obj_fn <- function(par) {
+      compute_neg_log_lik_for_participant(par, df_sub, k_try)
+    }
+    # Initial parameter guesses (for 6 parameters)
+    init_par  <- c(0, 0, 0.5, 0.5, 0.5, 0.5)
+    lower_par <- c(-5, -5, 0, 0, 0, 0)
+    upper_par <- c(5, 5, 5, 5, 5, 5)
+    
+    res <- optim(par=init_par,
+                 fn=obj_fn,
+                 method="L-BFGS-B",
+                 lower=lower_par,
+                 upper=upper_par,
+                 control = list(maxit = 1000, parscale = rep(1,6)))
+    
+    if (res$value < best_nll) {
+      best_nll <- res$value
+      best_k <- k_try
+      best_par <- res$par
+    }
+  }
+  
+  list(k = best_k, par = best_par, nll = best_nll)
+}
+
+
+```
+
+
+```{r}
+fit_model_for_participant(test_data1)
+```
+
+
+
+
+```{r}
+###############################################################################
+# 5) Simulation Function for a Single Game (for Test Prediction)
+###############################################################################
+simulate_game_POMDP <- function(game_data, params, k, start_round = 1, b_start = NULL) {
+  # params: vector of 6 parameters (alpha_b1, alpha_b2, alpha_tr_game1, beta_game1, alpha_tr_game2, beta_game2)
+  alpha_b1        <- params[1]
+  alpha_b2        <- params[2]
+  alpha_tr_game1  <- params[3]
+  beta_game1      <- params[4]
+  alpha_tr_game2  <- params[5]
+  beta_game2      <- params[6]
+  
+  gamma_ <- 1.0
+  sigma_emission <- 3
+  
+  # If no starting belief is provided, compute the initial belief.
+  if (is.null(b_start)) {
+    denom <- 1 + exp(alpha_b1) + exp(alpha_b2)
+    b_current <- c(exp(alpha_b1)/denom, exp(alpha_b2)/denom, 1 - exp(alpha_b1)/denom - exp(alpha_b2)/denom)
+  } else {
+    b_current <- b_start
+  }
+  
+  nll <- 0
+  predictions <- data.frame(round = integer(), observed_bin = integer(),
+                            predicted_bin = integer(), predicted_prob = numeric())
+  T_game <- nrow(game_data)
+  
+  game_label <- unique(game_data$gameNum.f)
+  if (length(game_label) != 1) stop("simulate_game_POMDP: game_data must contain one game")
+  if (game_label == "first game") {
+    alpha_tr <- alpha_tr_game1
+    beta_     <- beta_game1
+  } else if (game_label == "second game") {
+    alpha_tr <- alpha_tr_game2
+    beta_     <- beta_game2
+  } else {
+    stop("Unrecognized game label")
+  }
+  
+  for (t in seq(from = start_round, to = T_game)) {
+    I_t <- game_data$investment[t]
+    b_current <- update_belief_after_invest(b_current, I_t, sigma_emission)
+    H_left <- T_game - t + 1
+    Qvals <- compute_Qvalues_k(b_current, I_t, H_left, k, alpha_tr, beta_, gamma_, sigma_emission)
+    p_actions <- softmax(Qvals, beta_)
+
+    if (I_t <= 0) {
+    a_obs <- 1L
+    } else {
+    a_obs <- get_return_bin(game_data$return[t] / (3 * I_t))
+    } 
+    
+    
+    if (is.na(a_obs)) {
+      p_chosen <- 1e-12
+    } else if (a_obs >= 1 && a_obs <= 6) {
+      p_chosen <- p_actions[a_obs]
+    } else {
+      p_chosen <- 1e-12
+    }
+    if (p_chosen < 1e-12) p_chosen <- 1e-12
+    nll <- nll - log(p_chosen)
+    predicted_action <- which.max(p_actions)
+    predictions <- rbind(predictions,
+                         data.frame(round = t,
+                                    observed_bin = a_obs,
+                                    predicted_bin = predicted_action,
+                                    predicted_prob = p_actions[a_obs]))
+    b_current <- update_belief_after_action(b_current, I_t, a_obs, alpha_tr)
+  }
+  
+  list(nll = nll, final_belief = b_current, predictions = predictions)
+}
+
+```
+
+
+
+```{r}
+###############################################################################
+# 6) Out-of-Sample Functions for the POMDP Model
+###############################################################################
+simulate_training_POMDP <- function(training_data, params, k) {
+  games <- unique(training_data$gameNum.f)
+  belief_list <- list()
+  for (g in games) {
+    game_data <- training_data %>% filter(gameNum.f == g) %>% arrange(roundNum)
+    sim_res <- simulate_game_POMDP(game_data, params, k, start_round = 1, b_start = NULL)
+    belief_list[[g]] <- sim_res$final_belief
+  }
+  belief_list
+}
+
+simulate_test_POMDP <- function(test_data, params, k, training_beliefs) {
+  games <- unique(test_data$gameNum.f)
+  total_nll <- 0
+  details <- list()
+  for (g in games) {
+    game_data <- test_data %>% filter(gameNum.f == g) %>% arrange(roundNum)
+    if (is.null(training_beliefs[[g]])) {
+      warning(paste("No training belief for game", g))
+      next
+    }
+    sim_res <- simulate_game_POMDP(game_data, params, k, start_round = 1, b_start = training_beliefs[[g]])
+    total_nll <- total_nll + sim_res$nll
+    details[[g]] <- sim_res
+  }
+  list(total_nll = total_nll, details = details)
+}
+
+```
+
+
+```{r}
+# (b) Fit-and-test for a single participant using training/test split.
+fit_and_test_participant_POMDP <- function(participant_data, max_k=3) {
+  # Create roundNum if not present.
+  if (!"roundNum" %in% names(participant_data)) {
+    participant_data <- participant_data %>%
+      group_by(gameNum.f, playerId) %>% mutate(roundNum = row_number()) %>% ungroup()
+  }
+  training_data <- participant_data %>% filter(roundNum <= 20)
+  test_data <- participant_data %>% filter(roundNum > 20)
+  
+  fit_results <- fit_model_for_participant(training_data, max_k = max_k)
+  if (is.null(fit_results)) {
+    return(list(playerId = unique(participant_data$playerId),
+                fit_error = "Fitting failed",
+                test_nll = NA,
+                bin_accuracy = NA,
+                parameters = NA))
+  }
+  params <- fit_results$par
+  best_k <- fit_results$k
+  
+  training_beliefs <- simulate_training_POMDP(training_data, params, best_k)
+  test_sim <- simulate_test_POMDP(test_data, params, best_k, training_beliefs)
+  
+  all_predictions <- do.call(rbind, lapply(test_sim$details, function(x) x$predictions))
+  if (!is.null(all_predictions) && nrow(all_predictions) > 0) {
+    bin_accuracy <- mean(all_predictions$observed_bin == all_predictions$predicted_bin)
+  } else {
+    bin_accuracy <- NA
+  }
+  
+  list(playerId = unique(participant_data$playerId),
+       fit_error = NA,
+       test_nll = test_sim$total_nll,
+       bin_accuracy = bin_accuracy,
+       parameters = params,
+       training_fit_nll = fit_results$nll)
+}
+```
+
+```{r}
+fit_and_test_participant_POMDP(final_data%>% filter(playerId=="wrfmh8v8Ndz7y92Zi"), max_k=1)
+```
+
+
+
+
+```{r}
+# (c) Run out-of-sample prediction for all participants in parallel.
+fit_and_test_all_participants_POMDP <- function(final_data, max_k, n_cores = 8) {
+  # Preprocess data on the fly to compute return bin when needed.
+  # (We compute the bin on the fly rather than storing it.)
+  final_data$return_bin <- mapply(function(ret, invest) {
+    if (invest <= 0) return(1L)  # assign bin 1 by default
+    get_return_bin(ret / (3 * invest))
+  }, final_data$return, final_data$investment)
+  
+  # Split data by participant
+  df_list <- split(final_data, final_data$playerId)
+  
+  cl <- makeCluster(n_cores)
+  clusterExport(cl, varlist = c("fit_model_for_participant", "compute_neg_log_lik_for_participant",
+                                  "simulate_game_POMDP", "simulate_training_POMDP", "simulate_test_POMDP",
+                                  "fit_and_test_participant_POMDP",
+                                  "get_investment_bin", "get_return_bin",
+                                  "update_belief_after_invest", "update_belief_after_action",
+                                  "compute_Qvalues_k", "immediate_payoff", "transition_prob",
+                                  "emission_prob", "logistic", "softmax",
+                                  "proportion_midpoints", "bin_to_return_prop", "preprocess_data"),
+                  envir = environment())
+
+  clusterEvalQ(cl, { library(tidyverse) })
+  
+  results_list <- parLapplyLB(cl, df_list, function(p_data) {
+    tryCatch({
+      fit_and_test_participant_POMDP(p_data, max_k)
+    }, error = function(e) {
+      list(playerId = unique(p_data$playerId),
+           fit_error = e$message,
+           test_nll = NA,
+           bin_accuracy = NA,
+           training_fit_nll = NA)
+    })
+  })
+  stopCluster(cl)
+  
+  # Combine results: if any result returns an empty playerId, replace it with NA.
+  results_df <- do.call(rbind, lapply(results_list, function(res) {
+    if (is.null(res$playerId) || length(res$playerId) == 0) {
+      data.frame(
+        playerId = NA,
+        fit_error = NA,
+        test_nll = NA,
+        bin_accuracy = NA,
+        training_fit_nll = NA,
+        stringsAsFactors = FALSE
+      )
+    } else {
+      data.frame(
+        playerId = res$playerId,
+        fit_error = ifelse(is.null(res$fit_error), NA, res$fit_error),
+        test_nll = res$test_nll,
+        bin_accuracy = res$bin_accuracy,
+        training_fit_nll = res$training_fit_nll,
+        stringsAsFactors = FALSE
+      )
+    }
+  }))
+  
+  results_df
+}
+
+
+```
+
+
+```{r}
+# For out-of-sample prediction (fit on rounds ≤20, test on rounds >20):
+results_out_sample <- fit_and_test_all_participants_POMDP(final_data, max_k = 3, n_cores = 8)
+print(results_out_sample)
+```
+
+```{r}
+write.csv(results_out_sample, "results_pomdp_test.csv", row.names = FALSE)
+```
+
+
+
+```{r}
+
+###############################################################################
+# 7) Example Usage
+###############################################################################
+# Preprocess data (if not already done)
+df_preprocessed <- preprocess_data(final_data)
+
+# For full-data fitting (compute AIC, BIC, etc.)
+# (You could use your existing full-data fitting functions, e.g., fit_model_for_participant)
+# For example:
+# full_fit_results <- fit_model_for_participant(df_preprocessed, max_k = 3)
+# print(full_fit_results)
+
+# For out-of-sample prediction (fit on rounds ≤20, test on rounds >20)
+results_out_sample <- fit_and_test_all_participants_POMDP(df_preprocessed, max_k = 2, n_cores = 4)
+print(results_out_sample)
+```
+
+
+

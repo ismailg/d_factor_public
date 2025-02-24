@@ -1,0 +1,24 @@
+---
+title: "Untitled"
+author: "Ismail Guennouni"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+Look at trial by trial likelihpopds for all three methods for same participant and compare. 
+
+check for those using w=1 whether LL is similar to MB. 
+
+
+Studies to depth of planning : how may steps do people take ? 
+How far do people plan? how much people plan? 
+parametrised functions of values  DONE 
+
+
+same loss function as loglikelhood before. at the end we are trying to compare models. reinitialise at every time point or let it run
+
+DONE 
+
+subscale = alpha  + beta guilt + beta2 envy ..... DONE 
+
+right now, we don't see much difference in behavior between d_levels. BUT; do we see differences in behavior between models of d_level groups assuming infinite trial simulation (1000 trials).... you can do this simulations with that playing against HMM over long time windows. 

@@ -1,0 +1,485 @@
+---
+title: "data_preproc"
+author: "Ismail Guennouni"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+Here we extract data for the experiment from MongoDB and preprocess it 
+
+```{r}
+library(mongolite) # to access mongoDB
+library(tidyverse) # for wrangling and figures
+```
+
+```{r}
+# Set seed (if random generation)
+set.seed(2021)
+```
+
+
+```{r}
+####################
+# Custom functions #
+####################
+
+# Unnest dataframes from mongodb
+# by Joshua Becker: https://raw.githubusercontent.com/joshua-a-becker/RTools/master/df_unnest.R
+
+df_unnest = function(d) {
+  if(nrow(d)==0){return(NULL)}
+  to_unnest = which(sapply(colnames(d), FUN=function(z){class(d[,z])})=="data.frame" &
+                      sapply(colnames(d), FUN=function(cname){length(d[,cname])>0} ))
+  
+  if(length(to_unnest)==0) {return(d)}
+  
+  return_d = d[,-to_unnest]
+  for(cname in names(to_unnest)) {
+    new_chunk = d[,cname]
+    colnames(new_chunk)=paste0(cname, ".",colnames(new_chunk))
+    return_d = cbind(return_d, new_chunk)
+  }
+  
+  to_unnest = which(sapply(colnames(return_d), FUN=function(z){class(return_d[,z])})=="data.frame")
+  
+  
+  if(length(to_unnest)>0) {return(df_unnest(return_d))}
+  else{return(return_d)}
+}
+
+
+################################
+# Function to save data with backups
+SaveDataToday <- function(prefix = "Data") {
+  # Create timestamped backup folder
+  timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
+  newdir <- file.path("data_backups", paste(prefix, timestamp, sep = "_"))
+  
+  # Create backup directory if it doesn't exist
+  dir.create(file.path("data_backups"), showWarnings = FALSE)
+  dir.create(newdir, showWarnings = FALSE, recursive = TRUE)
+  
+  # Save data with error handling
+  tryCatch({
+    # Check if data exists before saving
+    required_objects <- c("players", "rounds", "games", "player_rounds", 
+                         "player_stages", "stages")
+    
+    for(obj in required_objects) {
+      if(exists(obj)) {
+        saveRDS(get(obj), file.path(newdir, paste0(obj, ".RDS")))
+      } else {
+        warning(paste("Object", obj, "not found"))
+      }
+    }
+    
+    # Create metadata file
+    write.csv(
+      data.frame(
+        backup_time = Sys.time(),
+        n_players = if(exists("players")) nrow(players) else NA,
+        n_games = if(exists("games")) nrow(games) else NA
+      ),
+      file = file.path(newdir, "backup_metadata.csv")
+    )
+    
+    message("Data backup completed successfully")
+    
+  }, error = function(e) {
+    message("Error saving data: ", e$message)
+  })
+}
+```
+
+
+
+
+```{r}
+# whether it should read data from MongoDB or locally
+isMongoData <- F
+```
+
+
+
+
+```{r}
+################################################################################
+# Getting the data from MongoDB #
+################################################################################
+
+# The URI to the mongoDB database
+uri <- "mongodb://adminUser:epsilone81@ec2-52-28-58-107.eu-central-1.compute.amazonaws.com:27017/empiricaDB?authSource=admin"
+
+###################
+# Get the players #
+###################
+if (isMongoData) {
+  # Get
+  players <- mongo("players", url = uri)$find(
+    fields='{"urlParams": false}'
+  ) %>%
+    df_unnest()
+  
+  # Rename
+  players <- players %>%
+    rename(
+      playerId = "_id"
+      , playerIndex = "index"
+      , playerCreatedAt = "createdAt"
+    ) %>% filter(!grepl("test", id)) 
+  
+  ##################
+  # Get the rounds #
+  ##################
+  
+  # Get
+  rounds <- mongo("rounds", url = uri)$find(
+    fields='{}'
+  ) %>% df_unnest()
+  
+  
+  # Rename
+  rounds <- rounds %>%
+    rename(
+      roundId = "_id"
+      , roundIndex = "index"
+    )
+  
+  ################# 
+  # Get the games # 
+  #################
+  
+  # Get
+  games <- mongo("games", url = uri)$find(
+    fields = '{}'
+  ) %>% df_unnest()
+  
+  # Rename 
+  games <- games %>%
+    rename(
+      gameId = "_id"
+      , gameIndex = "index"
+      , gameCreatedAt = "createdAt"
+      , gameFinishedAt = "finishedAt"
+    )
+  
+  #####################################
+  # Get the player-rounds information #
+  #####################################
+  
+  # Prepare
+  player_rounds <- mongo("player_rounds", url = uri)$find(
+    fields='{"data": false}'
+  ) %>% df_unnest()
+  
+  # Rename
+  player_rounds <- player_rounds %>% rename(playerRoundId = "_id")
+  
+  
+  #####################################
+  # Get the player-stages information #
+  #####################################
+  
+  # Prepare
+  player_stages <- mongo("player_stages", url = uri)$find(
+    fields='{"data": false}'
+  ) %>% df_unnest()
+  
+  # Rename
+  player_stages <- player_stages %>% rename(playerStageId = "_id")
+  
+  #####################################
+  # Get the stages information #
+  #####################################
+  
+  
+  stages <- mongo("stages", url = uri)$find(
+    fields='{"data": false}'
+  ) %>% df_unnest() 
+  
+  # Rename
+  stages <- stages %>% rename(stageId = "_id")
+  
+  brouillon <- full_join(stages %>% dplyr::select(stageId, gameId, roundId,startTimeAt,name, displayName),player_stages) 
+  
+  player_stages_full <- brouillon %>% mutate(stageTime = submittedAt - startTimeAt)
+  
+  # Save the data in backup folder
+  SaveDataToday()
+  
+} else {
+  # latest data download from server
+  file_name <- "Data_20241029_214649"
+  players       <- readRDS(file.path("data_backups", file_name, "players.RDS"))
+  rounds        <- readRDS(file.path("data_backups", file_name, "rounds.RDS"))
+  games         <- readRDS(file.path("data_backups", file_name, "games.RDS"))
+  player_rounds <- readRDS(file.path("data_backups", file_name, "player_rounds.RDS"))
+  
+}
+```
+
+<!-- DATA CLEANING  -->
+
+```{r}
+
+######################################
+#     Prepare each dataframe         #
+######################################
+
+# Prepare rounds
+j.rounds <- rounds %>%
+  dplyr::select(roundId, roundIndex, contains("data")) 
+
+# Prepare games
+j.games <- games %>%
+  dplyr::select(
+    gameId, gameIndex, 
+    gameCreatedAt, gameFinishedAt,
+    data.treatment.intervention,
+    contains("State")
+  )
+
+# Prepare player rounds
+j.player_rounds <- player_rounds %>%
+  dplyr::select(playerId, roundId, gameId)
+
+######################################
+# Join all the data we need together #
+######################################
+
+# Join
+d <- full_join(j.player_rounds, players, by = c("playerId", "gameId")) %>%
+  full_join(j.games, by = "gameId") %>%
+  full_join(j.rounds, by = "roundId")
+
+######################################
+#                 Clean              #
+######################################
+
+# Rename data.roundId because we are also using a roundId variable that is 
+# not the _id of roundId
+d <- d %>% rename(ourRoundId = data.roundId)
+
+# Replace "data." from names
+names(d) <- str_remove(names(d), "data.")
+names(players) <- str_remove(names(players), "data.")
+
+# Get rid of useless columns (that were only useful in the running of the exp)
+# Clean up - remove specified columns
+d <- d %>% 
+  dplyr::select(-c(roundIndex,
+            nbRounds,
+            isNext)) %>%
+  # Remove specified columns
+  dplyr::select(-matches("LPFS")) %>%  # removes all columns starting with LPFS
+  dplyr::select(-matches(paste(c(
+    "readyAt",
+    "timeoutWaitCount",
+    "exitSurvey.gender",
+    "avatar", 
+    "finishStudyAt",
+    "lastLogin.at",
+    "gameCreatedAt",                                                                                
+    "gameFinishedAt",   
+    "exitSurvey.age",
+    "treatment.intervention",
+    "postIntervention",
+    "exitStepsDone",
+    "gameLobbyId",
+    "updatedAt",
+    "payoffUlti1",
+    "payoffUlti2",
+    "payoffPD1",
+    "payoffPD2",
+    "instructions_trust_1",
+    "instructions_trust_2",
+    "instructions_ulti_1",
+    "instructions_ulti_2",
+    "return_trust_1",
+    "return_trust_2",
+    "emotionPage",
+    "mentalisePage",
+    "situationPage",
+    "coaxingPage",
+    "role_ulti",
+    "hasBrokenGameXtimes",
+    "answeredTheQuiz",
+    "ratePLayer_trustGame_1.How forgiving do you think the other player is?",
+    "ratePLayer_trustGame_2.How forgiving do you think the other player is?",
+    "pairingID",
+    "priorActionsLabel"
+  ), collapse = "|")))
+
+# Get performance on games
+# dataframe only players who finished the experiment, from now on, only use this one for analysis.
+players_finished  <- players %>% filter(finishedStudy)
+d_finished <- d %>% filter(finishedStudy)
+
+```
+
+
+```{r}
+d_raw <- d_finished  %>% mutate( gameNum.f = factor(gameNumber,labels = c("first game", "second game"), levels=c("1", "2"))) %>% 
+                            filter(roundType=="trust",!is.na(roundNum)) %>% 
+                            mutate(roundNum = as.numeric(as.character(roundNum))) %>%
+                            rename(# First Game
+                            rating_cooperative_1 = `ratePLayer_trustGame_1.How cooperative do you think the other player is?`,
+                            rating_trusting_1 = `ratePLayer_trustGame_1.How trusting do you think the other player is?`,
+                            rating_playAgain_1 = `ratePLayer_trustGame_1.If given the choice, would you like to play again with the other player?`,
+                            
+                            # Second Game
+                            rating_cooperative_2 = `ratePLayer_trustGame_2.How cooperative do you think the other player is?`,
+                            rating_trusting_2 = `ratePLayer_trustGame_2.How trusting do you think the other player is?`,
+                            rating_playAgain_2 = `ratePLayer_trustGame_2.If given the choice, would you like to play again with the other player?`
+                            )
+
+#######################    Pre-processing player ratings 
+
+# Pivot longer ratings on each attribute 
+df_coop <- d_raw%>% dplyr::select(playerId,contains("cooperative")) %>%  
+  pivot_longer(cols=contains("cooperative"), names_to = c("game"), names_pattern ="rating_cooperative_(.*)", values_to = "rating_coop") %>% distinct()
+
+df_trust <- d_raw %>% dplyr::select(playerId,contains("trusting")) %>%
+  pivot_longer(cols=contains("trusting"), names_to = c("game"), names_pattern ="rating_trusting_(.*)", values_to = "rating_trusting") %>% distinct()
+
+df_playAgain <- d_raw %>% dplyr::select(playerId,contains("again")) %>%  
+  pivot_longer(cols=contains("again"), names_to = c("game"), names_pattern ="rating_playAgain_(.*)", values_to = "rating_playAgain") %>% distinct()
+
+#merge all data frames together
+datRatings <- list(df_coop, df_trust,df_playAgain) %>% 
+              reduce(full_join, by=c('playerId','game')) %>%
+              mutate(gameNum.f = factor(game,labels = c("first game", "second game"),levels=c("1", "2")))
+
+
+```
+
+```{r}
+# First, let's create the volatile_first variable and process the data
+long_data <- d_raw %>%
+  # Create volatile_first indicator
+  group_by(id) %>%
+  mutate(
+    volatile_first = first(game_opponent == "AI_HMM_vol")
+  ) %>%
+  ungroup() %>%
+  # Select base columns that don't need reshaping
+  dplyr::select(
+    playerId, id, gameNum.f, game_opponent, volatile_first, roundNum,
+    investment, returns, player_returns_pct,
+    rating_cooperative_1, rating_playAgain_1, rating_trusting_1,
+    rating_cooperative_2, rating_playAgain_2, rating_trusting_2,
+    isLastRound, Turing.choice, Turing.justification,
+    exitSurvey.comment, DescribeOther, payoffTrust1,payoffTrust2
+  ) %>%
+  # Rename columns for clarity
+  rename(
+    gameOpponent = game_opponent,
+    return = returns,
+    return_pct = player_returns_pct
+  )
+
+# Create separate dataframes for game ratings (1 and 2)
+ratings_1 <- long_data %>%
+  dplyr::select(id, contains("_1")) %>%
+  distinct() %>%
+  rename_with(~str_remove(., "_1"), contains("_1"))
+
+ratings_2 <- long_data %>%
+  dplyr::select(id, contains("_2")) %>%
+  distinct() %>%
+  rename_with(~str_remove(., "_2"), contains("_2"))
+
+# Add game number to ratings
+ratings_1$gameNum.f <- "first game"
+ratings_2$gameNum.f <- "second game"
+
+# Combine ratings
+ratings_combined <- bind_rows(ratings_1, ratings_2)
+
+# Final reshape
+final_data <- long_data %>%
+  # Remove the duplicate rating columns
+  dplyr::select(-contains(c("_1", "_2"))) %>%
+  # Join with the ratings
+  left_join(ratings_combined, by = c("id", "gameNum.f")) %>%
+  # Arrange data
+  arrange(id, gameNum.f, isLastRound) %>%
+  # dplyr::select and order final columns
+  dplyr::select(
+    playerId, id, gameNum.f, gameOpponent, volatile_first,roundNum,
+    investment, return, return_pct,
+    rating_cooperative, rating_playAgain, rating_trusting,
+    isLastRound, Turing.choice, Turing.justification,
+    exitSurvey.comment, DescribeOther,payoffTrust1,payoffTrust2
+  )
+
+
+```
+
+```{r}
+
+# Select the desired columns
+d_selected <- d_raw %>%
+  dplyr::select(roundNum, gameNum.f, playerId, starts_with("State_"))
+
+# Reshape the data
+d_reshaped <- d_selected %>%
+  pivot_longer(cols = starts_with("State_"), 
+               names_to = "State_name", 
+               values_to = "investorState") %>%
+  mutate(roundNum = as.numeric(str_extract(State_name, "(?<=r)\\d+")),
+         gameNumber = as.numeric(str_extract(State_name, "(?<=game_)\\d+"))) %>%
+  dplyr::select(playerId, gameNumber, roundNum, investorState) %>%
+  arrange(playerId, gameNumber, roundNum) %>%
+  filter(!is.na(investorState)) %>% unique() %>%
+  mutate(gameNum.f = factor(gameNumber,labels = c("first game", "second game"),levels=c("1", "2"))) %>%
+  dplyr::select(-gameNumber)
+
+
+# Join the reshaped data back to the original dataset
+final_data <- final_data %>%
+  left_join(d_reshaped, by = c("playerId", "gameNum.f", "roundNum")) %>%
+  # Arrange data
+  arrange(id, gameNum.f, roundNum)
+```
+
+
+
+
+```{r}
+# Basic validation
+cat("Number of unique participants:", length(unique(final_data$id)), "\n")
+
+
+# # Optional: Save the processed data
+# saveRDS(final_data, "processed_long_data.RDS")
+```
+
+```{r}
+Dfactor_scores <- read_csv("data/pre-screening/scored_data.csv")
+
+final_data <- final_data %>%
+  left_join(
+    Dfactor_scores %>% dplyr::select(Prolific_ID, total_score, callous_score, deceit_score, sadism_score, vindict_score),
+    by = c("id" = "Prolific_ID")
+  ) %>% 
+  mutate(
+    d_level = factor(
+      if_else(total_score > 40, "high_D", "low_D"),
+      levels = c("low_D", "high_D")  # specify levels to ensure order
+    )
+  )
+  
+```
+
+
+```{r}
+write_csv(final_data, "data/final_data.csv")
+```
+
+
+```{r}
+# Clearing the environment
+rm(list = ls(all.names = TRUE))
+```
+
