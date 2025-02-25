@@ -2113,7 +2113,7 @@ library(ggplot2)
 results_pomdp_test<- read_csv("results_pomdp_test.csv")
 results_hybPlan <- read_csv("results_hybPlan_test.csv")
 #results_hybPlan_2a <- read_csv("results_hybPlan_test_2a.csv")
-results_hybPlan_2a <- results_hybPlan_test_2a$results_df
+results_hybPlan_2a <- results_hybPlan_test_2a
 results_MFRL <- read_csv("results_MFRL_test.csv")
 results_MBRL <- read_csv("results_mbPlan_test.csv")
 

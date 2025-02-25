@@ -181,7 +181,7 @@ direct_learning_model2 <- function(params, data) {
 # 4A) Full–Data Fitting Functions
 ###############################################################################
 # (a) Fit a single participant using all rounds.
-fit_direct_model2_single <- function(participant_data, n_multistart = 20) {
+fit_direct_model2_single <- function(participant_data, n_multistart = 5) {
   # Create a round index if not present.
   if (!"roundNum" %in% names(participant_data)) {
     participant_data <- participant_data %>%
@@ -246,7 +246,7 @@ fit_direct_model2_single <- function(participant_data, n_multistart = 20) {
 
 
 ```{r}
-fit_direct_model2_single (test_data1,n_multistart = 2)
+fit_direct_model2_single (test_data1,n_multistart = 5)
 ```
 
 ## Parallel fitting all participants
