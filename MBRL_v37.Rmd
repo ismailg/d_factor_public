@@ -1,0 +1,2639 @@
+---
+title: "MBRL_v37"
+author: "Ismail Guennouni"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Load required libraries
+library(tidyverse)
+library(optimx)
+library(lhs)
+library(parallel)
+if(requireNamespace("pbapply", quietly = TRUE)) library(pbapply)
+```
+
+
+# Helpful functions 
+
+```{r}
+#' Convert investment value to a discrete state bin (1-3)
+#' Maps continuous investment values to discrete states for planning
+#' @param investment Numeric investment amount
+#' @return Integer state bin (1, 2, or 3)
+get_investment_bin <- function(investment) {
+  if (investment <= 7)   return(1)  # Low investment state
+  if (investment <= 14)  return(2)  # Medium investment state
+  return(3)                         # High investment state
+}
+
+#' Convert return proportion to a discrete action bin (1-6)
+#' Maps continuous return proportions to discrete actions for RL model
+#' @param return_prop Numeric return proportion (0-1)
+#' @return Integer action bin (1-6)
+get_return_bin <- function(return_prop) {
+  if (return_prop < 0 || return_prop > 1) 
+    stop("Return proportion must be between 0 and 1.")
+  # 6 equal-sized bins in [0,1]
+  return(min(floor(return_prop * 6) + 1, 6))
+}
+
+#' Calculate utility using Fehr-Schmidt inequality aversion model
+#' Computes utility based on own payoff and other's payoff, accounting for
+#' disadvantageous inequality (envy) and advantageous inequality (guilt)
+#' @param own_payoff Numeric payoff for self
+#' @param other_payoff Numeric payoff for other player
+#' @param envy Parameter for disadvantageous inequality (when other gets more)
+#' @param guilt Parameter for advantageous inequality (when self gets more)
+#' @return Numeric utility value
+calculate_fs_utility <- function(own_payoff, other_payoff, envy, guilt) {
+  # Disadvantageous inequality (when other gets more than self)
+  disadv <- max(other_payoff - own_payoff, 0)
+  # Advantageous inequality (when self gets more than other)
+  adv    <- max(own_payoff - other_payoff, 0)
+  # Fehr-Schmidt utility
+  return(own_payoff - envy * disadv - guilt * adv)
+}
+
+#' Calculate payoffs for both players in the trust game
+#' @param investment Amount invested by the investor
+#' @param return_amount Amount returned by the trustee
+#' @return List with payoffs for trustee and investor
+calculate_payoffs <- function(investment, return_amount) {
+  trustee_payoff  <- 3 * investment - return_amount
+  investor_payoff <- return_amount - investment
+  return(list(trustee = trustee_payoff, investor = investor_payoff))
+}
+
+#' Map numeric bin to investment amount
+#' @param s_bin Integer state bin (1, 2, or 3)
+#' @return Numeric investment amount
+bin_to_investment <- function(s_bin) {
+  # Representative investment amounts for each state
+  if (s_bin == 1) return(4)   # Low investment
+  if (s_bin == 2) return(11)  # Medium investment
+  if (s_bin == 3) return(17)  # High investment
+  stop("Invalid s_bin in bin_to_investment()")
+}
+
+#' Map action bin to return proportion
+#' @param a_bin Integer action bin (1-6)
+#' @return Numeric return proportion
+bin_to_return_prop <- function(a_bin) {
+  # Return midpoint of each bin (1-6) in range [0,1]
+  return((2 * a_bin - 1) / 12)
+}
+```
+
+```{r}
+#' Calculate immediate Fehr-Schmidt payoff for a given state-action pair
+#' Used in planning to estimate rewards for different choices
+#' @param s_bin State bin (1-3)
+#' @param a_bin Action bin (1-6)
+#' @param envy Envy parameter (disadvantageous inequality)
+#' @param guilt Guilt parameter (advantageous inequality)
+#' @return Numeric utility value
+fs_payoff_state_action <- function(s_bin, a_bin, envy, guilt) {
+  # Convert bins to actual values
+  inv  <- bin_to_investment(s_bin)
+  prop <- bin_to_return_prop(a_bin)
+  ret  <- round(prop * (3 * inv))
+  
+  # Calculate payoffs
+  trustee_payoff  <- 3 * inv - ret
+  investor_payoff <- ret - inv
+  
+  # Calculate Fehr-Schmidt utility
+  disadv_inequity <- max(investor_payoff - trustee_payoff, 0)
+  adv_inequity    <- max(trustee_payoff - investor_payoff, 0)
+  utility <- trustee_payoff - envy * disadv_inequity - guilt * adv_inequity
+  
+  return(utility)
+}
+
+#' Calculate transition probabilities between investor states
+#' Used in planning to predict how investor will respond to trustee actions
+#' @param s_bin Current state bin (1-3)
+#' @param a_bin Action bin (1-6)
+#' @param sensitivity Parameter determining how strongly return affects transitions
+#' @return Vector of transition probabilities to each state
+transition_probs_state_action <- function(s_bin, a_bin, sensitivity) {
+  # Convert bins to actual values
+  inv  <- bin_to_investment(s_bin)
+  prop <- bin_to_return_prop(a_bin)
+  ret  <- prop * (3 * inv)
+  
+  # Calculate net return (investor's profit/loss)
+  net_return <- ret - inv
+  
+  # Initialize probability vector
+  probs <- rep(0, 3)
+  
+  # Different transition rules based on current state
+  if (s_bin == 1) {
+    # In lowest state: can only stay or move up
+    p_up      <- exp(sensitivity * net_return)
+    p_stay    <- 1
+    norm_const <- p_up + p_stay
+    probs[1] <- p_stay / norm_const  # stay in state 1
+    probs[2] <- p_up / norm_const    # move to state 2
+    probs[3] <- 0                    # can't move to state 3 from state 1
+  } else if (s_bin == 3) {
+    # In highest state: can only stay or move down
+    p_down    <- exp(-sensitivity * net_return)
+    p_stay    <- 1
+    norm_const <- p_down + p_stay
+    probs[1] <- 0                    # can't move to state 1 from state 3
+    probs[2] <- p_down / norm_const  # move to state 2
+    probs[3] <- p_stay / norm_const  # stay in state 3
+  } else {  # s_bin == 2
+    # In middle state: can move either direction
+    p_up   <- exp(sensitivity * net_return)
+    p_down <- exp(-sensitivity * net_return)
+    p_stay <- 1
+    norm_const <- p_up + p_down + p_stay
+    probs[1] <- p_down / norm_const  # move to state 1
+    probs[2] <- p_stay / norm_const  # stay in state 2
+    probs[3] <- p_up / norm_const    # move to state 3
+  }
+  
+  return(probs)
+}
+```
+
+
+
+## dynamic programming for trustee
+```{r}
+#' Compute value function using dynamic programming for k-step lookahead
+#' This function implements planning by looking ahead k steps and calculating expected values
+#' @param Q_values Current Q-values for state-action pairs
+#' @param envy Envy parameter
+#' @param guilt Guilt parameter
+#' @param sensitivity Sensitivity parameter for transitions
+#' @param plan_depth How many steps to look ahead
+#' @return Matrix of updated values for state-action pairs
+compute_dp_value <- function(Q_values, envy, guilt, sensitivity, plan_depth) {
+  # Precompute immediate rewards and transition probabilities
+  R <- matrix(0, nrow = 3, ncol = 6)
+  P_array <- array(0, dim = c(3, 6, 3))
+  
+  for (s in 1:3) {
+    for (a in 1:6) {
+      R[s, a] <- fs_payoff_state_action(s, a, envy, guilt)
+      P_array[s, a, ] <- transition_probs_state_action(s, a, sensitivity)
+    }
+  }
+  
+  # Base case: planning depth 1
+  max_Q <- apply(Q_values, 1, max)  # Maximum Q-value for each state
+  dp <- matrix(0, nrow = 3, ncol = 6)
+  
+  for (s in 1:3) {
+    for (a in 1:6) {
+      # Expected value = immediate reward + discounted future value
+      dp[s, a] <- R[s, a] + sum(P_array[s, a, ] * max_Q)
+    }
+  }
+  
+  # For depths 2 up to plan_depth, iteratively backup values
+  if (plan_depth >= 2) {
+    for (d in 2:plan_depth) {
+      max_dp <- apply(dp, 1, max)  # Maximum value for each state after d-1 steps
+      
+      for (s in 1:3) {
+        for (a in 1:6) {
+          # Update expected value with deeper planning
+          dp[s, a] <- R[s, a] + sum(P_array[s, a, ] * max_dp)
+        }
+      }
+    }
+  }
+  
+  return(dp)
+}
+```
+
+
+
+# Model based RL (with planning) implementation 
+
+
+```{r}
+#' Model-based RL model for trustee choices in the Trust Game
+#' 
+#' @param params_free Vector of free parameters to be estimated
+#' @param data Dataframe containing observed game data
+#' @param param_fixed List of fixed parameters (not to be estimated)
+#' @param plan_depth How many steps to look ahead in planning
+#' @param use_priors Whether to use prior distributions for regularization
+#' @return Negative log-likelihood of observed choices
+mb_trustee_decision_model <- function(params_free, data, param_fixed = list(), 
+                                      plan_depth = 2, use_priors = FALSE) {
+  # 1) Reconstruct full parameter set from free and fixed parameters
+  all_names <- c("envy", "guilt", "temp", "sensitivity", "alpha_Q")
+  param_values <- numeric(length(all_names))
+  names(param_values) <- all_names
+  
+  # Fill in fixed parameters first
+  for (name in names(param_fixed)) {
+    if (name %in% all_names) {
+      param_values[name] <- param_fixed[[name]]
+    }
+  }
+  
+  # Fill in free parameters
+  free_idx <- which(!(all_names %in% names(param_fixed)))
+  if (length(free_idx) != length(params_free)) {
+    stop("Number of free parameters doesn't match expected count")
+  }
+  
+  param_values[free_idx] <- params_free
+  
+  # Extract individual parameters
+  envy <- param_values["envy"]
+  guilt <- param_values["guilt"]
+  temp <- param_values["temp"]
+  sensitivity <- param_values["sensitivity"]
+  alpha_Q <- param_values["alpha_Q"]
+  
+  # Basic parameter validation
+  if (any(is.na(param_values)) || any(param_values < 0)) {
+    return(1e10)  # Return high value for invalid parameters
+  }
+  
+  # Initialize
+  n_trials <- nrow(data)
+  log_lik <- 0
+  
+  # Initialize Q-values (3 states x 6 actions)
+  Q_values <- matrix(0, nrow = 3, ncol = 6)
+  
+  # Track current game to reset Q-values between games
+  current_game <- NULL
+  
+  # Process each trial
+  for (t in seq_len(n_trials)) {
+    investment <- data$investment[t]
+    return_amt <- data$return[t]
+    game_label <- data$gameNum.f[t]
+    
+    # Skip invalid trials
+    if (is.na(investment) || is.na(return_amt) || investment <= 0) {
+      next
+    }
+    
+    # Calculate return proportion
+    return_prop <- return_amt / (3 * investment)
+    if (return_prop < 0 || return_prop > 1) {
+      next
+    }
+    
+    # Reset Q-values at game boundaries
+    if (!is.null(current_game) && game_label != current_game) {
+      Q_values <- matrix(0, nrow = 3, ncol = 6)
+    }
+    current_game <- game_label
+    
+    # Get current state and action bins
+    s_bin <- get_investment_bin(investment)
+    a_bin <- get_return_bin(return_prop)
+    
+    # Compute reward from observed data
+    payoffs <- calculate_payoffs(investment, return_amt)
+    reward <- calculate_fs_utility(payoffs$trustee, payoffs$investor, envy, guilt)
+    
+    # Model-based planning: compute lookahead values with dynamic programming
+    dp_values <- compute_dp_value(Q_values, envy, guilt, sensitivity, plan_depth)
+    val_k <- dp_values[s_bin, a_bin]
+    
+    # TD learning update
+    td_err <- val_k - Q_values[s_bin, a_bin]
+    Q_values[s_bin, a_bin] <- Q_values[s_bin, a_bin] + alpha_Q * td_err
+    
+    # Action selection via softmax with improved numerical stability
+    Q_state <- Q_values[s_bin, ]
+    
+    # Better centering for numerical stability
+    max_Q <- max(Q_state)
+    if (is.infinite(max_Q) || is.na(max_Q)) {
+      max_Q <- 0  # Handle case where Q-values might be NaN or Inf
+    }
+    centered <- Q_state - max_Q
+    
+    # Compute probabilities with safeguards
+    # Ensure temperature is positive
+    safe_temp <- max(temp, 0.01)  # Prevent division by very small temp
+    exp_values <- exp(centered / safe_temp)
+    sum_exp <- sum(exp_values)
+    
+    # Make sure probabilities sum to 1
+    if (sum_exp <= 0 || is.infinite(sum_exp) || is.na(sum_exp)) {
+      # Fall back to uniform probabilities if numerical issues
+      probs <- rep(1/length(Q_state), length(Q_state))
+    } else {
+      probs <- exp_values / sum_exp
+    }
+    
+    # Ensure probabilities are valid and don't introduce zeros
+    probs <- pmax(probs, 1e-10)  # Prevent zero probabilities
+    probs <- probs / sum(probs)  # Re-normalize to ensure sum is exactly 1
+    
+    # Update log-likelihood - verify it's a valid probability first
+    if (probs[a_bin] <= 0 || probs[a_bin] > 1 || is.na(probs[a_bin])) {
+      warning("Invalid probability encountered: ", probs[a_bin])
+      # Use a small probability as fallback
+      current_log_lik <- log(1e-10)
+    } else {
+      current_log_lik <- log(probs[a_bin])
+    }
+    
+    # Log-likelihood should always be zero or negative
+    if (current_log_lik > 0) {
+      warning("Positive log-likelihood detected: ", current_log_lik)
+      current_log_lik <- -1e-10  # Use a small negative value
+    }
+    
+    log_lik <- log_lik + current_log_lik
+  }
+  
+  # Final log-likelihood check - it should always be negative
+  if (log_lik > 0 || is.na(log_lik) || is.infinite(log_lik)) {
+    warning("Invalid final log-likelihood: ", log_lik)
+    return(1e10)  # Return a large positive value
+  }
+  
+  # Apply prior regularization if requested
+  if (use_priors) {
+    # Define prior distributions based on literature
+    prior_means <- c(envy = 2.0, guilt = 0.5, temp = 5.0, sensitivity = 0.5, alpha_Q = 0.3)
+    prior_sds <- c(envy = 1.0, guilt = 0.3, temp = 2.0, sensitivity = 0.3, alpha_Q = 0.2)
+    
+    # Adjust for fixed parameters
+    for (param in names(param_fixed)) {
+      prior_means[param] <- param_fixed[[param]]
+      prior_sds[param] <- 0.001  # Very narrow prior for fixed parameters
+    }
+    
+    # Calculate log prior probabilities
+    prior_terms <- sum(dnorm(param_values, mean = prior_means, sd = prior_sds, log = TRUE))
+    
+    # Return negative log posterior (negative log likelihood + negative log prior)
+    return(-(log_lik + prior_terms))
+  }
+  
+  # Return negative log-likelihood (should always be positive since log_lik is negative)
+  return(-log_lik)  # This is the NLL
+}
+```
+
+
+
+
+
+# Fitting function for MBRL
+
+
+# Fitting function for MBRL
+
+
+```{r}
+#' Fit model-based RL model to a single participant's data
+#' This function allows fixing some parameters while estimating others, and uses
+#' multiple optimization methods and starting points to ensure reliable fitting.
+#' 
+#' @param participant_data Dataframe with participant data
+#' @param param_fixed List of parameters to fix (not estimate)
+#' @param max_k Maximum planning depth to try
+#' @param hierarchical Whether to use hierarchical Bayesian approach with priors
+#' @param n_multistart Number of different starting points to try
+#' @return List with best-fitting parameters and model fit statistics
+fit_participant_mb <- function(participant_data, 
+                               param_fixed = list(),
+                               max_k = 3, 
+                               hierarchical = FALSE, 
+                               n_multistart = 20) {
+  # Define parameter bounds for free parameters
+  bounds_list <- list(
+    envy = c(0, 6), 
+    guilt = c(0, 2), 
+    temp = c(0.1, 15), 
+    sensitivity = c(0.01, 2), 
+    alpha_Q = c(0.01, 0.99)
+  )
+  
+  # Identify which parameters are free vs. fixed
+  all_names <- c("envy", "guilt", "temp", "sensitivity", "alpha_Q")
+  free_names <- setdiff(all_names, names(param_fixed))
+  
+  # If all parameters are fixed, just evaluate without optimization
+  if (length(free_names) == 0) {
+    best_k <- NA
+    best_nll <- Inf
+    
+    # Try different planning depths
+    for (k_test in 1:max_k) {
+      nll <- mb_trustee_decision_model(
+        params_free = numeric(0),
+        data = participant_data,
+        param_fixed = param_fixed,
+        plan_depth = k_test,
+        use_priors = hierarchical
+      )
+      
+      if (nll < best_nll) {
+        best_nll <- nll
+        best_k <- k_test
+      }
+    }
+    
+    # Calculate information criteria
+    n_params <- length(param_fixed)
+    n_obs <- sum(!is.na(participant_data$investment) & participant_data$investment > 0)
+    aic <- 2 * best_nll + 2 * n_params
+    bic <- 2 * best_nll + log(n_obs) * n_params
+    
+    return(list(
+      parameters = param_fixed,
+      nll = best_nll,
+      aic = aic,
+      bic = bic,
+      k = best_k,
+      converged = TRUE
+    ))
+  }
+  
+  # Extract bounds for free parameters
+  lower <- sapply(free_names, function(name) bounds_list[[name]][1])
+  upper <- sapply(free_names, function(name) bounds_list[[name]][2])
+  
+  # Set random seed for reproducibility
+  set.seed(123)
+  
+  # Initialize tracking for best model across all k values
+  best_overall <- list(nll = Inf, k = NA, parameters = NULL, converged = FALSE)
+  
+  # Try different planning depths (k values)
+  for (k_test in 1:max_k) {
+    # Generate multiple starting points using Latin Hypercube Sampling
+    lhs_samples <- randomLHS(n_multistart, length(free_names))
+    init_params_list <- lapply(seq_len(n_multistart), function(i) {
+      lower + (upper - lower) * lhs_samples[i, ]
+    })
+    
+    # Track best fit for this k value
+    best_fit_k <- NULL
+    best_nll_k <- Inf
+    
+    # Try each starting point
+    for (start_par in init_params_list) {
+      tryCatch({
+        # Create objective function that returns the NLL
+        obj_fn <- function(par) {
+          mb_trustee_decision_model(
+            params_free = par,
+            data = participant_data,
+            param_fixed = param_fixed,
+            plan_depth = k_test,
+            use_priors = hierarchical
+          )
+        }
+        
+        # L-BFGS-B optimization
+        fit_lbfgs <- optimx(
+          par = start_par,
+          fn = obj_fn,
+          method = "L-BFGS-B",
+          lower = lower,
+          upper = upper,
+          control = list(
+            maxit = 1000,
+            parscale = upper - lower,
+            dowarn = FALSE
+          )
+        )
+        
+        # Try Nelder-Mead to refine solution
+        if (!is.null(fit_lbfgs) && fit_lbfgs$convcode[1] == 0) {
+          # Create a wrapped objective function that enforces bounds
+          bounded_obj_fn <- function(par) {
+            # First check if any parameter is outside bounds
+            if (any(par < lower) || any(par > upper)) {
+              return(1e10)  # Return high value for out-of-bounds parameters
+            }
+            
+            # Otherwise call the original objective function
+            obj_fn(par)
+          }
+          
+          fit_nm <- optimx(
+            par = as.numeric(fit_lbfgs[1, 1:length(free_names)]),
+            fn = bounded_obj_fn,  # Use the bounded version
+            method = "Nelder-Mead",
+            control = list(
+              maxit = 2000,
+              dowarn = FALSE
+            )
+          )
+          
+          # Use the better of the two results
+          if (!is.null(fit_nm) && fit_nm$convcode[1] == 0 && 
+              fit_nm$value[1] < fit_lbfgs$value[1]) {
+            current_fit <- fit_nm
+          } else {
+            current_fit <- fit_lbfgs
+          }
+          
+          # Check if this is the best so far for this k
+          if (current_fit$value[1] < best_nll_k) {
+            best_nll_k <- current_fit$value[1]
+            best_fit_k <- current_fit
+          }
+        } else if (!is.null(fit_lbfgs)) {
+          # If L-BFGS-B failed but returned a result, still consider it
+          if (fit_lbfgs$value[1] < best_nll_k) {
+            best_nll_k <- fit_lbfgs$value[1]
+            best_fit_k <- fit_lbfgs
+          }
+        }
+      }, error = function(e) {
+        # Silently continue if optimization fails
+      })
+    }
+    
+    # If we found a valid fit for this k value
+    if (!is.null(best_fit_k) && best_nll_k < Inf) {
+      # Extract best parameters for free parameters
+      best_params_free <- as.numeric(best_fit_k[1, 1:length(free_names)])
+      names(best_params_free) <- free_names
+      
+      # Combine with fixed parameters
+      best_params_k <- param_fixed
+      for (name in free_names) {
+        best_params_k[[name]] <- best_params_free[name]
+      }
+      
+      # Update overall best if this is better
+      if (best_nll_k < best_overall$nll) {
+        best_overall$nll <- best_nll_k
+        best_overall$k <- k_test
+        best_overall$parameters <- best_params_k
+        best_overall$converged <- best_fit_k$convcode[1] == 0
+      }
+    }
+  }
+  
+  # Check if all optimization attempts failed
+  if (is.infinite(best_overall$nll)) {
+    return(list(error = "All optimizations failed for all k"))
+  }
+  
+  # Calculate information criteria
+  n_params <- length(best_overall$parameters)
+  n_obs <- sum(!is.na(participant_data$investment) & participant_data$investment > 0)
+  best_overall$aic <- 2 * best_overall$nll + 2 * n_params
+  best_overall$bic <- 2 * best_overall$nll + log(n_obs) * n_params
+  
+  return(best_overall)
+}
+```
+
+
+
+
+
+```{r}
+# Assume final_data is defined with columns: playerId, investment, return, gameNum.f, etc.
+first_participant <- unique(final_data$playerId)[1]
+test_data1 <- final_data %>% filter(playerId %in% first_participant)
+fit_participant_mb(test_data1 , max_k = 1, hierarchical = TRUE, n_multistart = 2)
+```
+
+
+
+# Parallel fitting for all participants 
+
+```{r}
+#' Helper function to process a single participant in parallel
+#' Defined outside the main function so it can be properly exported to worker nodes
+#' @param p_data Data for a single participant
+#' @param param_fixed Parameters to fix (not estimate)
+#' @param max_k Maximum planning depth to try
+#' @param hierarchical Whether to use hierarchical Bayesian approach
+#' @param n_multistart Number of different starting points to try
+#' @return List with fitting results
+process_participant <- function(p_data, param_fixed, max_k, hierarchical, n_multistart) {
+  tryCatch({
+    # Fit the model for this participant
+    fit_result <- fit_participant_mb(
+      participant_data = p_data,
+      param_fixed = param_fixed,
+      max_k = max_k,
+      hierarchical = hierarchical,
+      n_multistart = n_multistart
+    )
+    
+    # Extract participant ID
+    p_id <- unique(p_data$playerId)
+    
+    # Return results in a consistent format
+    if (!is.null(fit_result$error)) {
+      return(list(
+        participant = p_id,
+        error = fit_result$error,
+        parameters = NULL,
+        nll = NA,
+        aic = NA,
+        bic = NA,
+        best_k = NA
+      ))
+    }
+    
+    # Ensure NLL is valid (should already be positive from mb_trustee_decision_model)
+    if (!is.null(fit_result$nll) && (fit_result$nll < 0 || is.na(fit_result$nll) || is.infinite(fit_result$nll))) {
+      warning("Invalid NLL detected in fit_result: ", fit_result$nll)
+      return(list(
+        participant = p_id,
+        error = "Invalid negative log-likelihood value",
+        parameters = NULL,
+        nll = NA,
+        aic = NA,
+        bic = NA,
+        best_k = NA
+      ))
+    }
+    
+    return(list(
+      participant = p_id,
+      error = NULL,
+      parameters = fit_result$parameters,
+      nll = fit_result$nll,
+      aic = fit_result$aic,
+      bic = fit_result$bic,
+      best_k = fit_result$k
+    ))
+  }, error = function(e) {
+    p_id <- if (!is.null(p_data) && !is.null(p_data$playerId)) {
+      unique(p_data$playerId)[1]
+    } else {
+      "unknown"
+    }
+    return(list(
+      participant = p_id,
+      error = as.character(e),
+      parameters = NULL,
+      nll = NA,
+      aic = NA,
+      bic = NA,
+      best_k = NA
+    ))
+  })
+}
+
+
+
+
+
+#' Fit model-based RL model to data from all participants in parallel
+#' This function applies the single-participant fitting function to multiple
+#' participants in parallel, with support for fixed parameters.
+#' 
+#' @param data Dataframe with data from all participants
+#' @param param_fixed List of parameters to fix (not estimate)
+#' @param max_k Maximum planning depth to try
+#' @param hierarchical Whether to use hierarchical Bayesian approach
+#' @param n_multistart Number of different starting points to try
+#' @param n_cores Number of cores for parallel processing
+#' @return Dataframe with fitting results for all participants
+fit_all_participants_mb <- function(data,
+                                   param_fixed = list(),
+                                   max_k = 3,
+                                   hierarchical = FALSE,
+                                   n_multistart = 50,
+                                   n_cores = parallel::detectCores() - 1) {
+  # Verify required columns
+  if (!"gameNum.f" %in% names(data)) stop("'gameNum.f' column is missing in the data.")
+  if (!"playerId" %in% names(data)) stop("'playerId' column is missing in the data.")
+  
+  # Split data by participant
+  participants <- split(data, data$playerId)
+  n_participants <- length(participants)
+  if (n_participants == 0) stop("No participants found in data.")
+  
+  # Set up parallel cluster
+  cl <- makeCluster(n_cores)
+  on.exit(stopCluster(cl))
+  
+  # Export necessary functions and data to all workers
+  clusterExport(cl, c(
+    "fit_participant_mb", 
+    "mb_trustee_decision_model", 
+    "compute_dp_value",
+    "calculate_payoffs",
+    "calculate_fs_utility",
+    "get_investment_bin",
+    "get_return_bin",
+    "bin_to_investment",
+    "bin_to_return_prop",
+    "fs_payoff_state_action",
+    "transition_probs_state_action",
+    "process_participant"
+  ))
+  
+  # Export parameters explicitly
+  clusterExport(cl, c("param_fixed", "max_k", "hierarchical", "n_multistart"), 
+                envir = environment())
+  
+  # Load required packages on all workers
+  clusterEvalQ(cl, {
+    library(tidyverse)
+    library(optimx)
+    library(lhs)
+  })
+  
+  # Record start time for timing
+  start_time <- Sys.time()
+  message("Fitting ", n_participants, " participants...")
+  
+  # Run parallel fitting with explicit argument passing
+  if (requireNamespace("pbapply", quietly = TRUE)) {
+    results <- pbapply::pblapply(participants, function(p_data) {
+      # Call the helper function with explicit arguments
+      process_participant(
+        p_data = p_data,
+        param_fixed = param_fixed,
+        max_k = max_k,
+        hierarchical = hierarchical, 
+        n_multistart = n_multistart
+      )
+    }, cl = cl)
+  } else {
+    results <- parLapply(cl, participants, function(p_data) {
+      # Call the helper function with explicit arguments
+      process_participant(
+        p_data = p_data,
+        param_fixed = param_fixed,
+        max_k = max_k,
+        hierarchical = hierarchical, 
+        n_multistart = n_multistart
+      )
+    })
+  }
+  
+  # Record end time and calculate elapsed time
+  end_time <- Sys.time()
+  elapsed <- difftime(end_time, start_time, units = "secs")
+  message("Parallel fitting complete. Total elapsed time: ", round(elapsed, 2), " seconds.")
+  
+  # Combine results into a dataframe
+  results_df <- do.call(rbind, lapply(results, function(res) {
+    if (is.null(res$parameters)) {
+      return(data.frame(
+        participant = res$participant,
+        envy = NA,
+        guilt = NA,
+        temp = NA,
+        sensitivity = NA,
+        alpha_Q = NA,
+        nll = NA,
+        aic = NA,
+        bic = NA,
+        best_k = NA,
+        error = ifelse(is.null(res$error), "Unknown error", res$error),
+        approach = ifelse(hierarchical, "hierarchical", "standard"),
+        stringsAsFactors = FALSE
+      ))
+    }
+    
+    # Extract parameter values, defaulting to NA if not present
+    params <- res$parameters
+    data.frame(
+      participant = res$participant,
+      envy = ifelse("envy" %in% names(params), params[["envy"]], NA),
+      guilt = ifelse("guilt" %in% names(params), params[["guilt"]], NA),
+      temp = ifelse("temp" %in% names(params), params[["temp"]], NA),
+      sensitivity = ifelse("sensitivity" %in% names(params), params[["sensitivity"]], NA),
+      alpha_Q = ifelse("alpha_Q" %in% names(params), params[["alpha_Q"]], NA),
+      nll = res$nll,
+      aic = res$aic,
+      bic = res$bic,
+      best_k = res$best_k,
+      error = NA,
+      approach = ifelse(hierarchical, "hierarchical", "standard"),
+      stringsAsFactors = FALSE
+    )
+  }))
+  
+  # Add timing information as attribute
+  attr(results_df, "timing") <- list(
+    start_time = start_time,
+    end_time = end_time,
+    total_seconds = as.numeric(elapsed)
+  )
+  
+  # Calculate and add summary statistics as attribute
+  success_rate <- mean(!is.na(results_df$nll))
+  param_means <- colMeans(results_df[, c("envy", "guilt", "temp", "sensitivity", "alpha_Q")], na.rm = TRUE)
+  param_sds <- apply(results_df[, c("envy", "guilt", "temp", "sensitivity", "alpha_Q")], 2, sd, na.rm = TRUE)
+  
+  attr(results_df, "summary") <- list(
+    success_rate = success_rate,
+    param_means = param_means,
+    param_sds = param_sds,
+    n_participants = n_participants,
+    hierarchical = hierarchical,
+    fixed_params = param_fixed
+  )
+  
+  return(results_df)
+}
+```
+
+
+
+
+```{r}
+#Now get test data and fit model
+# first_2_participants <- unique(final_data$playerId)[1:2]
+# test_data2 <- final_data %>%
+#     dplyr::filter(playerId %in% first_2_participants)
+# 
+# fit_all_participants_mb(test_data2,param_fixed=list(),
+#                                    max_k = 1,
+#                                    hierarchical = TRUE,
+#                                    n_multistart = 2,
+#                                    n_cores = parallel::detectCores() - 1)
+
+
+```
+
+
+
+
+# Out of sample testing
+
+```{r}
+#' Simulate model predictions for a single game
+#' This function runs the model forward to generate predictions based on observed inputs,
+#' and can use pre-trained Q-values from previous data for continuity.
+#' 
+#' @param game_data Dataframe with observed game data
+#' @param params Model parameters
+#' @param plan_depth How many steps to look ahead
+#' @param Q_init Initial Q-values (optional)
+#' @return List with negative log likelihood, Q-values, and predictions
+simulate_game_mb <- function(game_data, params, plan_depth, Q_init = NULL) {
+  # Initialize Q-values
+  if (is.null(Q_init)) {
+    Q_values <- matrix(0, nrow = 3, ncol = 6)
+  } else {
+    Q_values <- Q_init
+  }
+  
+  # Extract parameters
+  envy <- params["envy"]
+  guilt <- params["guilt"]
+  temp <- params["temp"]
+  sensitivity <- params["sensitivity"]
+  alpha_Q <- params["alpha_Q"]
+  
+  # Initialize variables to track
+  n_trials <- nrow(game_data)
+  nll <- 0
+  predictions <- data.frame(
+    round = integer(),
+    observed_bin = integer(),
+    predicted_bin = integer(),
+    predicted_prob = numeric()
+  )
+  
+  # Check that we have exactly one game
+  game_label <- unique(game_data$gameNum.f)
+  if (length(game_label) > 1) stop("simulate_game_mb: game_data contains multiple games.")
+  
+  # Process each trial
+  for (t in seq_len(n_trials)) {
+    investment <- game_data$investment[t]
+    return_amt <- game_data$return[t]
+    
+    # Skip invalid trials
+    if (is.na(investment) || is.na(return_amt) || investment <= 0) {
+      next
+    }
+    
+    # Calculate return proportion
+    return_prop <- return_amt / (3 * investment)
+    if (return_prop < 0 || return_prop > 1) {
+      next
+    }
+    
+    # Get current state and action bins
+    s_bin <- get_investment_bin(investment)
+    a_bin <- get_return_bin(return_prop)
+    
+    # --- Prediction Step: Compute predicted probabilities BEFORE updating Q-values ---
+    # Get Q-values for current state
+    Q_state <- Q_values[s_bin, ]
+    
+    # Apply softmax to get action probabilities
+    centered <- Q_state - max(Q_state)  # For numerical stability
+    probs <- exp(centered / temp)
+    probs <- probs / sum(probs)
+    probs <- pmax(probs, 1e-10)  # Prevent zero probabilities
+    
+    # Record predicted bin and probability of observed bin
+    predicted_bin <- which.max(probs)
+    nll <- nll - log(probs[a_bin])
+    
+    # Store prediction details
+    predictions <- rbind(
+      predictions,
+      data.frame(
+        round = t, 
+        observed_bin = a_bin,
+        predicted_bin = predicted_bin,
+        predicted_prob = probs[a_bin]
+      )
+    )
+    
+    # --- Learning Step: Update Q-values based on the observed outcome ---
+    # Update Q-values using model-based planning
+    dp_values <- compute_dp_value(Q_values, envy, guilt, sensitivity, plan_depth)
+    val_k <- dp_values[s_bin, a_bin]
+    td_err <- val_k - Q_values[s_bin, a_bin]
+    Q_values[s_bin, a_bin] <- Q_values[s_bin, a_bin] + alpha_Q * td_err
+  }
+  
+  # Return results
+  list(nll = nll, Q_values = Q_values, predictions = predictions)
+}
+
+#' Extract final Q-values from training data (per game)
+#' This function runs the model on training data to extract the final Q-values,
+#' which can then be used as starting points for testing.
+#' 
+#' @param training_data Dataframe with training data
+#' @param params Model parameters
+#' @param plan_depth How many steps to look ahead
+#' @return List of Q-values for each game
+get_training_Q <- function(training_data, params, plan_depth) {
+  # Get unique games
+  games <- unique(training_data$gameNum.f)
+  Q_list <- list()
+  
+  # Process each game
+  for (g in games) {
+    # Get data for this game
+    game_data <- training_data %>% filter(gameNum.f == g)
+    
+    # Simulate game to get final Q-values
+    sim_result <- simulate_game_mb(game_data, params, plan_depth)
+    Q_list[[g]] <- sim_result$Q_values
+  }
+  
+  return(Q_list)
+}
+
+#' Test model on held-out data
+#' This function evaluates model performance on unseen data,
+#' using Q-values from training as starting points.
+#' 
+#' @param test_data Dataframe with test data
+#' @param params Model parameters
+#' @param plan_depth How many steps to look ahead
+#' @param training_Q_list List of Q-values from training
+#' @return List with test results
+test_model <- function(test_data, params, plan_depth, training_Q_list) {
+  # Get unique games
+  games <- unique(test_data$gameNum.f)
+  total_nll <- 0
+  details <- list()
+  
+  # Process each game
+  for (g in games) {
+    # Get data for this game
+    game_data <- test_data %>% filter(gameNum.f == g)
+    
+    # Check if we have training Q-values for this game
+    if (is.null(training_Q_list[[g]])) {
+      warning(paste("No training Q values found for game", g))
+      next
+    }
+    
+    # Test model on this game
+    sim_result <- simulate_game_mb(
+      game_data, 
+      params, 
+      plan_depth,
+      Q_init = training_Q_list[[g]]
+    )
+    
+    total_nll <- total_nll + sim_result$nll
+    details[[g]] <- sim_result
+  }
+  
+  # Return results
+  list(total_nll = total_nll, details = details)
+}
+
+#' Simulate data from model-based RL with given parameters
+#' This function generates synthetic data based on the MBRL model with specific parameter values.
+#' The generated data resembles what we would expect from a participant with those characteristics.
+#' 
+#' @param params_true True parameters to generate data from
+#' @param game_size Number of rounds per game
+#' @param playerId Identifier for simulated player
+#' @return Dataframe with simulated game data
+simulate_mb_data <- function(params_true, game_size = 25, playerId = "sim") {
+  # Extract parameters with better error handling
+  envy <- if (is.list(params_true)) params_true$envy else params_true["envy"]
+  guilt <- if (is.list(params_true)) params_true$guilt else params_true["guilt"]
+  temp <- if (is.list(params_true)) params_true$temp else params_true["temp"]
+  sensitivity <- if (is.list(params_true)) params_true$sensitivity else params_true["sensitivity"]
+  alpha_Q <- if (is.list(params_true)) params_true$alpha_Q else params_true["alpha_Q"]
+  plan_depth <- if (is.list(params_true)) params_true$plan_depth else params_true["plan_depth"]
+  
+  # Validate parameters
+  if (is.null(envy) || is.null(guilt) || is.null(temp) || 
+      is.null(sensitivity) || is.null(alpha_Q) || is.null(plan_depth)) {
+    stop("Missing required parameters")
+  }
+  
+  # Convert to numeric if needed
+  envy <- as.numeric(envy)
+  guilt <- as.numeric(guilt)
+  temp <- as.numeric(temp)
+  sensitivity <- as.numeric(sensitivity)
+  alpha_Q <- as.numeric(alpha_Q)
+  plan_depth <- as.numeric(plan_depth)
+  
+  # Create data frame to store results
+  total_rounds <- 2 * game_size
+  df <- data.frame(
+    roundNum = rep(1:game_size, 2),
+    investment = rep(NA, total_rounds),
+    return = rep(NA, total_rounds),
+    gameNum.f = factor(
+      c(rep("first game", game_size), rep("second game", game_size)),
+      levels = c("first game", "second game")
+    )
+  )
+  
+  # Initialize state variables
+  Q_values <- matrix(0, nrow = 3, ncol = 6)
+  current_state <- "neutral"  # Start in neutral state
+  
+  # State conversion functions
+  state_to_bin <- function(state_name) {
+    switch(state_name,
+           "unhappy" = 1,
+           "neutral" = 2,
+           "happy" = 3,
+           2)  # Default to neutral if unknown state
+  }
+  
+  # Safer investment generation
+  generate_investment <- function(s_bin) {
+    if (s_bin == 1) {
+      investment <- round(runif(1, 1, 7))  # Low investment
+    } else if (s_bin == 3) {
+      investment <- round(runif(1, 15, 20))  # High investment
+    } else {
+      investment <- round(runif(1, 8, 14))  # Medium investment
+    }
+    return(investment)
+  }
+  
+  # Transition function based on net return
+  update_state <- function(state, net_return) {
+    if (state == "unhappy") {
+      # From unhappy state: can stay or go to neutral
+      p_up <- exp(sensitivity * net_return)
+      p_stay <- 1
+      total <- p_up + p_stay
+      probs <- c(p_stay/total, p_up/total, 0)
+    } else if (state == "neutral") {
+      # From neutral state: can go to any state
+      p_up <- exp(sensitivity * net_return)
+      p_down <- exp(-sensitivity * net_return)
+      p_stay <- 1
+      total <- p_up + p_down + p_stay
+      probs <- c(p_down/total, p_stay/total, p_up/total)
+    } else {  # "happy"
+      # From happy state: can stay or go to neutral
+      p_down <- exp(-sensitivity * net_return)
+      p_stay <- 1
+      total <- p_down + p_stay
+      probs <- c(0, p_down/total, p_stay/total)
+    }
+    
+    # Sample new state with error handling
+    new_state_idx <- tryCatch({
+      sample(1:3, 1, prob = probs)
+    }, error = function(e) {
+      # If there's an error, use a default
+      return(2)  # Default to neutral state
+    })
+    
+    return(c("unhappy", "neutral", "happy")[new_state_idx])
+  }
+  
+  # Generate data for each round
+  for (t in 1:total_rounds) {
+    tryCatch({
+      # Reset Q-values at the start of the second game
+      if (t == game_size + 1) {
+        Q_values <- matrix(0, nrow = 3, ncol = 6)
+        current_state <- "neutral"
+      }
+      
+      # Investor state determines investment
+      s_bin <- state_to_bin(current_state)
+      investment <- generate_investment(s_bin)
+      df$investment[t] <- investment
+      
+      # Trustee chooses action based on model-based RL
+      s_bin_actual <- get_investment_bin(investment)
+      
+      # Compute planned values
+      dp_values <- compute_dp_value(Q_values, envy, guilt, sensitivity, plan_depth)
+      
+      # Choose action via softmax
+      Q_state <- Q_values[s_bin_actual, ]
+      
+      # Handle numerical issues
+      max_Q <- max(Q_state)
+      if (is.infinite(max_Q) || is.na(max_Q)) {
+        Q_state <- rep(0, length(Q_state))
+        max_Q <- 0
+      }
+      
+      centered <- Q_state - max_Q  # For numerical stability
+      
+      # Compute softmax probabilities
+      exp_values <- exp(centered / temp)
+      if (any(is.infinite(exp_values)) || any(is.na(exp_values))) {
+        exp_values <- exp(centered / max(temp, 1))  # Use safer temperature
+      }
+      
+      # Normalize probabilities
+      sum_exp <- sum(exp_values)
+      if (sum_exp == 0 || is.na(sum_exp) || is.infinite(sum_exp)) {
+        probs <- rep(1/6, 6)
+      } else {
+        probs <- exp_values / sum_exp
+      }
+      
+      # Sample action
+      a_bin <- sample(1:6, 1, prob = probs)
+      
+      # Compute return amount
+      return_prop <- bin_to_return_prop(a_bin)
+      return_amt <- round(return_prop * (3 * investment))
+      df$return[t] <- return_amt
+      
+      # Calculate reward and update Q-values
+      payoffs <- calculate_payoffs(investment, return_amt)
+      reward <- calculate_fs_utility(payoffs$trustee, payoffs$investor, envy, guilt)
+      
+      # Update Q-values based on planned values
+      val_k <- dp_values[s_bin_actual, a_bin]
+      td_err <- val_k - Q_values[s_bin_actual, a_bin]
+      Q_values[s_bin_actual, a_bin] <- Q_values[s_bin_actual, a_bin] + alpha_Q * td_err
+      
+      # Investor responds to trustee's action
+      net_return <- return_amt - investment
+      current_state <- update_state(current_state, net_return)
+      
+    }, error = function(e) {
+      # Use default values to continue
+      if (is.na(df$investment[t])) df$investment[t] <- 10
+      if (is.na(df$return[t])) df$return[t] <- 15
+    })
+  }
+  
+  # Add player ID
+  df$playerId <- playerId
+  
+  return(df)
+}
+```
+
+```{r}
+#' Fit parameters on training data and test on held-out data
+#' This function implements a cross-validation approach for a single participant.
+#' It first fits the model on training data, then evaluates on test data.
+#' 
+#' @param participant_data Dataframe with participant data
+#' @param param_fixed List of parameters to fix (not estimate)
+#' @param max_k Maximum planning depth to try
+#' @param hierarchical Whether to use hierarchical Bayesian approach
+#' @param n_multistart Number of different starting points to try
+#' @param train_cutoff Round number to split training/test data
+#' @return List with fitting and testing results
+fit_and_test_participant <- function(participant_data, 
+                                    param_fixed = list(),
+                                    max_k = 3, 
+                                    hierarchical = FALSE, 
+                                    n_multistart = 20,
+                                    train_cutoff = 20) {
+  # Make sure we have a roundNum column
+  if (!"roundNum" %in% names(participant_data)) {
+    participant_data <- participant_data %>%
+      group_by(gameNum.f) %>%
+      mutate(roundNum = row_number()) %>%
+      ungroup()
+  }
+  
+  # Split data into training and test sets
+  train_data <- participant_data %>% filter(roundNum <= train_cutoff)
+  test_data <- participant_data %>% filter(roundNum > train_cutoff)
+  
+  # Ensure we have both training and test data
+  if (nrow(train_data) == 0 || nrow(test_data) == 0) {
+    return(list(
+      playerId = unique(participant_data$playerId),
+      fit_error = "Insufficient data for train/test split",
+      test_nll = NA,
+      bin_accuracy = NA,
+      parameters = NA,
+      best_k = NA,
+      training_nll = NA
+    ))
+  }
+  
+  # Fit model on training data
+  tryCatch({
+    fit_result <- fit_participant_mb(
+      participant_data = train_data,
+      param_fixed = param_fixed,
+      max_k = max_k,
+      hierarchical = hierarchical,
+      n_multistart = n_multistart
+    )
+    
+    # Check if fit was successful
+    if (is.null(fit_result$parameters) || is.null(fit_result$k) || is.null(fit_result$nll)) {
+      return(list(
+        playerId = unique(participant_data$playerId),
+        fit_error = "Fitting failed to produce valid parameters",
+        test_nll = NA,
+        bin_accuracy = NA,
+        parameters = NA,
+        best_k = NA,
+        training_nll = NA
+      ))
+    }
+    
+    # Get the final Q-values from training
+    best_params <- fit_result$parameters
+    best_k <- fit_result$k
+    training_nll <- fit_result$nll
+    
+    # Prepare parameters for simulation
+    param_vector <- numeric(5)
+    names(param_vector) <- c("envy", "guilt", "temp", "sensitivity", "alpha_Q")
+    
+    for (param_name in names(param_vector)) {
+      param_vector[param_name] <- if (param_name %in% names(best_params)) {
+        best_params[[param_name]]
+      } else {
+        NA
+      }
+    }
+    
+    # Ensure all parameters are available (no NAs)
+    if (any(is.na(param_vector))) {
+      return(list(
+        playerId = unique(participant_data$playerId),
+        fit_error = "Missing parameters in fit result",
+        test_nll = NA,
+        bin_accuracy = NA,
+        parameters = NA,
+        best_k = NA,
+        training_nll = NA
+      ))
+    }
+    
+    # Get Q-values from training
+    training_Q <- get_training_Q(train_data, param_vector, best_k)
+    
+    # Test model on held-out data
+    test_result <- test_model(test_data, param_vector, best_k, training_Q)
+    
+    # Calculate bin prediction accuracy
+    all_predictions <- bind_rows(lapply(test_result$details, function(x) x$predictions))
+    bin_accuracy <- mean(all_predictions$observed_bin == all_predictions$predicted_bin, na.rm = TRUE)
+    
+    # Return compiled results
+    return(list(
+      playerId = unique(participant_data$playerId),
+      fit_error = NULL,
+      test_nll = test_result$total_nll,
+      bin_accuracy = bin_accuracy,
+      parameters = best_params,
+      best_k = best_k,
+      training_nll = training_nll
+    ))
+    
+  }, error = function(e) {
+    # Return error information
+    return(list(
+      playerId = unique(participant_data$playerId),
+      fit_error = as.character(e),
+      test_nll = NA,
+      bin_accuracy = NA,
+      parameters = NA,
+      best_k = NA,
+      training_nll = NA
+    ))
+  })
+}
+```
+
+
+```{r}
+#' Helper function to process one participant for out-of-sample testing
+#' Defined outside the main function for proper parallel export
+#' @param p_data Data for a single participant
+#' @param param_fixed Parameters to fix (not estimate)
+#' @param max_k Maximum planning depth to try
+#' @param hierarchical Whether to use hierarchical Bayesian approach
+#' @param n_multistart Number of different starting points to try
+#' @param train_cutoff Round number to split training/test data
+#' @return List with fitting and testing results
+process_test_participant <- function(p_data, param_fixed, max_k, hierarchical, n_multistart, train_cutoff) {
+  tryCatch({
+    fit_and_test_participant(
+      participant_data = p_data,
+      param_fixed = param_fixed,
+      max_k = max_k,
+      hierarchical = hierarchical,
+      n_multistart = n_multistart,
+      train_cutoff = train_cutoff
+    )
+  }, error = function(e) {
+    list(
+      playerId = unique(p_data$playerId),
+      fit_error = as.character(e),
+      test_nll = NA,
+      bin_accuracy = NA,
+      parameters = NA,
+      best_k = NA,
+      training_nll = NA
+    )
+  })
+}
+
+#' Fit and test all participants in parallel
+#' This function performs out-of-sample validation for all participants
+#' by fitting on training data and testing on held-out data.
+#' 
+#' @param data Dataframe with data from all participants
+#' @param param_fixed List of parameters to fix (not estimate)
+#' @param max_k Maximum planning depth to try
+#' @param hierarchical Whether to use hierarchical Bayesian approach
+#' @param n_multistart Number of different starting points to try
+#' @param n_cores Number of cores for parallel processing
+#' @param train_cutoff Round number to split training/test data
+#' @return Dataframe with fitting and testing results for all participants
+fit_and_test_all_participants <- function(data,
+                                         param_fixed = list(),
+                                         max_k = 3,
+                                         hierarchical = FALSE,
+                                         n_multistart = 20,
+                                         n_cores = parallel::detectCores() - 1,
+                                         train_cutoff = 20) {
+  # Make sure we have round numbers
+  if (!"roundNum" %in% names(data)) {
+    data <- data %>%
+      group_by(gameNum.f, playerId) %>%
+      mutate(roundNum = row_number()) %>%
+      ungroup()
+  }
+  
+  # Split data by participant
+  participants <- split(data, data$playerId)
+  
+  # Set up parallel cluster
+  cl <- makeCluster(n_cores)
+  on.exit(stopCluster(cl))
+  
+  # Export necessary functions and data to all workers
+  clusterExport(cl, c(
+    "fit_participant_mb", 
+    "mb_trustee_decision_model", 
+    "compute_dp_value",
+    "calculate_payoffs",
+    "calculate_fs_utility",
+    "get_investment_bin",
+    "get_return_bin",
+    "bin_to_investment",
+    "bin_to_return_prop",
+    "fs_payoff_state_action",
+    "transition_probs_state_action",
+    "simulate_game_mb",
+    "get_training_Q",
+    "test_model",
+    "fit_and_test_participant",
+    "process_test_participant"
+  ))
+  
+  # Export parameters explicitly
+  clusterExport(cl, c("param_fixed", "max_k", "hierarchical", "n_multistart", "train_cutoff"), 
+                envir = environment())
+  
+  # Load required packages on all workers
+  clusterEvalQ(cl, {
+    library(tidyverse)
+    library(optimx)
+    library(lhs)
+  })
+  
+  # Run parallel fitting and testing
+  if (requireNamespace("pbapply", quietly = TRUE)) {
+    results <- pbapply::pblapply(participants, function(p_data) {
+      process_test_participant(
+        p_data = p_data,
+        param_fixed = param_fixed,
+        max_k = max_k,
+        hierarchical = hierarchical, 
+        n_multistart = n_multistart,
+        train_cutoff = train_cutoff
+      )
+    }, cl = cl)
+  } else {
+    results <- parLapply(cl, participants, function(p_data) {
+      process_test_participant(
+        p_data = p_data,
+        param_fixed = param_fixed,
+        max_k = max_k,
+        hierarchical = hierarchical, 
+        n_multistart = n_multistart,
+        train_cutoff = train_cutoff
+      )
+    })
+  }
+  
+  # Combine results into a dataframe
+  results_df <- do.call(rbind, lapply(results, function(res) {
+    if (is.null(res$parameters) || all(is.na(res$parameters))) {
+      return(data.frame(
+        playerId = res$playerId,
+        fit_error = ifelse(is.null(res$fit_error), "Unknown error", res$fit_error),
+        test_nll = NA,
+        bin_accuracy = NA,
+        training_nll = NA,
+        envy = NA,
+        guilt = NA,
+        temp = NA,
+        sensitivity = NA,
+        alpha_Q = NA,
+        best_k = NA,
+        stringsAsFactors = FALSE
+      ))
+    }
+    
+    params <- res$parameters
+    data.frame(
+      playerId = res$playerId,
+      fit_error = NA,
+      test_nll = res$test_nll,
+      bin_accuracy = res$bin_accuracy,
+      training_nll = res$training_nll,
+      envy = if ("envy" %in% names(params)) params[["envy"]] else NA,
+      guilt = if ("guilt" %in% names(params)) params[["guilt"]] else NA,
+      temp = if ("temp" %in% names(params)) params[["temp"]] else NA,
+      sensitivity = if ("sensitivity" %in% names(params)) params[["sensitivity"]] else NA,
+      alpha_Q = if ("alpha_Q" %in% names(params)) params[["alpha_Q"]] else NA,
+      best_k = res$best_k,
+      stringsAsFactors = FALSE
+    )
+  }))
+  
+  # Add summary attributes
+  attr(results_df, "param_fixed") <- param_fixed
+  attr(results_df, "train_cutoff") <- train_cutoff
+  attr(results_df, "success_rate") <- mean(!is.na(results_df$test_nll))
+  
+  return(results_df)
+}
+```
+
+
+```{r}
+# Example 4: Test model on held-out data
+results_test <- fit_and_test_all_participants(
+  data = test_data2,
+  max_k = 1,
+  hierarchical = TRUE,
+  n_multistart = 1,
+  n_cores = 2,
+  train_cutoff = 20
+)
+
+results_test 
+```
+
+
+# Param recovery analysis
+
+```{r}
+#' Helper function that performs a single parameter recovery simulation with robust error handling
+#' This function simulates data with known parameters and then tries to recover those parameters.
+#' 
+#' @param sim_id Simulation ID
+#' @param params_true True parameters to simulate data with
+#' @param game_size Number of rounds per game
+#' @param max_k Maximum planning depth to try in fitting
+#' @param n_multistart Number of different starting points to try
+#' @param param_fixed List of parameters to fix during recovery (not estimate)
+#' @return List with simulation results and recovered parameters
+run_one_simulation <- function(sim_id, params_true, game_size, max_k, n_multistart, param_fixed = list()) {
+  # Ensure params_true is correctly formatted
+  if (!is.list(params_true)) {
+    params_true <- as.list(params_true)
+  }
+  
+  # Simulate data with the given parameters
+  sim_data <- tryCatch({
+    data <- simulate_mb_data(
+      params_true = params_true,
+      game_size = game_size,
+      playerId = paste0("sim_", sim_id)
+    )
+    
+    # Verify data is valid
+    if (nrow(data) == 0 || all(is.na(data$investment)) || all(is.na(data$return))) {
+      stop("Generated data is empty or contains all NA values")
+    }
+    
+    data
+  }, error = function(e) {
+    message("Error in simulation ", sim_id, ": ", e$message)
+    return(NULL)
+  })
+  
+  # Check if simulation failed
+  if (is.null(sim_data)) {
+    return(list(
+      sim_id = sim_id,
+      true_params = params_true,
+      fit_result = list(error = "Simulation failed")
+    ))
+  }
+  
+  # Fit model to simulated data
+  fit_result <- tryCatch({
+    fit_participant_mb(
+      participant_data = sim_data,
+      param_fixed = param_fixed,
+      max_k = max_k,
+      hierarchical = FALSE,
+      n_multistart = n_multistart
+    )
+  }, error = function(e) {
+    message("Error in fitting simulation ", sim_id, ": ", e$message)
+    return(list(error = as.character(e)))
+  })
+  
+  # Return results
+  list(
+    sim_id = sim_id,
+    true_params = params_true,
+    fit_result = fit_result
+  )
+}
+
+
+
+#' Run parameter recovery experiment with reliable parallel processing
+#' This function performs multiple simulations with different parameter values 
+#' to assess model identifiability. Parameters are sampled from truncated normal
+#' distributions centered on literature priors.
+#' 
+#' @param n_sims Number of simulations to run
+#' @param param_priors List of parameter priors with means and standard deviations
+#' @param param_bounds List of parameter bounds (min and max)
+#' @param param_fixed List of parameters to fix during recovery (not estimate)
+#' @param game_size Number of rounds per game
+#' @param max_k Maximum planning depth to try
+#' @param n_multistart Number of different starting points to try
+#' @param n_cores Number of cores for parallel processing
+#' @return List with parameter recovery results
+param_recovery_experiment <- function(n_sims = 20,
+                                     param_priors = NULL,
+                                     param_bounds = NULL,
+                                     param_fixed = list(),
+                                     game_size = 25,
+                                     max_k = 3,
+                                     n_multistart = 10,
+                                     n_cores = parallel::detectCores() - 1) {
+  
+  # Set default parameter priors (means and standard deviations) if not provided
+  if (is.null(param_priors)) {
+    param_priors <- list(
+      envy = list(mean = 1.5, sd = 0.7),
+      guilt = list(mean = 0.5, sd = 0.3),
+      temp = list(mean = 3.0, sd = 1.5),
+      sensitivity = list(mean = 0.3, sd = 0.2),
+      alpha_Q = list(mean = 0.4, sd = 0.2),
+      plan_depth = list(mean = 2, sd = 0.8)
+    )
+  }
+  
+  # Set default parameter bounds if not provided
+  if (is.null(param_bounds)) {
+    param_bounds <- list(
+      envy = c(0, 6),  # Allow zero values
+      guilt = c(0, 2), # Allow zero values
+      temp = c(0.1, 15),
+      sensitivity = c(0.01, 2),
+      alpha_Q = c(0.01, 0.99),
+      plan_depth = c(1, 3)
+    )
+  }
+  
+  # Debug info - display free vs fixed parameters
+  cat("\nParameter configuration:\n")
+  free_params <- setdiff(names(param_priors), names(param_fixed))
+  cat("Free parameters:", paste(free_params, collapse=", "), "\n")
+  cat("Fixed parameters:", paste(names(param_fixed), collapse=", "), "\n")
+  
+  # Remove fixed parameters from param_priors and param_bounds
+  for (name in names(param_fixed)) {
+    param_priors[[name]] <- NULL
+    param_bounds[[name]] <- NULL
+  }
+  
+  # Verify param_priors has actual parameters to sample from
+  if (length(param_priors) == 0) {
+    stop("No free parameters to vary in simulations. Cannot perform parameter recovery.")
+  }
+  
+  # Helper function to sample from truncated normal distribution
+  sample_truncated_normal <- function(mean, sd, lower, upper, n = 1) {
+    if (requireNamespace("truncnorm", quietly = TRUE)) {
+      # Use truncnorm package if available
+      return(truncnorm::rtruncnorm(n, a = lower, b = upper, mean = mean, sd = sd))
+    } else {
+      # Fallback implementation using rejection sampling
+      samples <- numeric(n)
+      for (i in 1:n) {
+        repeat {
+          sample <- rnorm(1, mean = mean, sd = sd)
+          if (sample >= lower && sample <= upper) {
+            samples[i] <- sample
+            break
+          }
+        }
+      }
+      return(samples)
+    }
+  }
+  
+  # Generate true parameter sets by sampling from truncated normals
+  true_param_sets <- list()
+  
+  # Set seed for reproducibility
+  set.seed(123)
+  
+  for (i in 1:n_sims) {
+    params_true <- list()
+    
+    # First add fixed parameters
+    for (name in names(param_fixed)) {
+      params_true[[name]] <- param_fixed[[name]]
+    }
+    
+    # Then sample free parameters from truncated normal distributions
+    for (name in names(param_priors)) {
+      mean_val <- param_priors[[name]]$mean
+      sd_val <- param_priors[[name]]$sd
+      lower_bound <- param_bounds[[name]][1]
+      upper_bound <- param_bounds[[name]][2]
+      
+      params_true[[name]] <- sample_truncated_normal(
+        mean = mean_val,
+        sd = sd_val,
+        lower = lower_bound,
+        upper = upper_bound
+      )
+    }
+    
+    # Ensure plan_depth is integer if it's being sampled
+    if ("plan_depth" %in% names(params_true)) {
+      params_true[["plan_depth"]] <- round(params_true[["plan_depth"]])
+    }
+    
+    true_param_sets[[i]] <- params_true
+  }
+  
+  # Debug: Show some of the parameter sets
+  cat("\nGenerated", length(true_param_sets), "unique parameter sets for simulations\n")
+  cat("Example parameter sets:\n")
+  for (i in 1:min(3, length(true_param_sets))) {
+    cat("Set", i, ":\n")
+    for (name in names(true_param_sets[[i]])) {
+      cat("  ", name, "=", true_param_sets[[i]][[name]], "\n")
+    }
+  }
+  
+  # Set up parallel cluster
+  cat("\nSetting up parallel cluster with", n_cores, "cores...\n")
+  cl <- makeCluster(n_cores)
+  on.exit(stopCluster(cl))
+  
+  # Load required packages on all workers
+  clusterEvalQ(cl, {
+    library(tidyverse)
+    library(optimx)
+    library(lhs)
+  })
+  
+  # Export necessary functions to the cluster
+  functions_to_export <- c(
+    "simulate_mb_data",
+    "fit_participant_mb",
+    "mb_trustee_decision_model",
+    "compute_dp_value",
+    "calculate_payoffs",
+    "calculate_fs_utility",
+    "get_investment_bin",
+    "get_return_bin",
+    "bin_to_investment",
+    "bin_to_return_prop",
+    "fs_payoff_state_action",
+    "transition_probs_state_action"
+  )
+  
+  for (func in functions_to_export) {
+    tryCatch({
+      clusterExport(cl, func, envir = environment())
+    }, error = function(e) {
+      warning("Could not export function ", func, ": ", e$message)
+    })
+  }
+  
+  # Export simulation parameters explicitly
+  clusterExport(cl, c("true_param_sets", "game_size", "param_fixed", "max_k", "n_multistart", "param_bounds"), 
+                envir = environment())
+  
+  # Define worker function directly in the main function scope
+  worker_function <- function(sim_id) {
+    params_true <- true_param_sets[[sim_id]]
+    
+    # Simulate data
+    sim_data <- tryCatch({
+      data <- simulate_mb_data(
+        params_true = params_true,
+        game_size = game_size,
+        playerId = paste0("sim_", sim_id)
+      )
+      
+      # Check if data is valid
+      if (nrow(data) == 0 || all(is.na(data$investment)) || all(is.na(data$return))) {
+        stop("Generated data is invalid")
+      }
+      
+      data
+    }, error = function(e) {
+      message("Error in simulation ", sim_id, ": ", e$message)
+      return(NULL)
+    })
+    
+    # Check if simulation failed
+    if (is.null(sim_data)) {
+      return(list(
+        sim_id = sim_id,
+        true_params = params_true,
+        fitted_params = NULL,
+        error = "Simulation failed"
+      ))
+    }
+    
+    # Fit model
+    fit_result <- tryCatch({
+      result <- fit_participant_mb(
+        participant_data = sim_data,
+        param_fixed = param_fixed,
+        max_k = max_k,
+        hierarchical = FALSE,
+        n_multistart = n_multistart
+      )
+      
+      # Check if fitting was successful
+      if (is.null(result$parameters)) {
+        return(list(
+          sim_id = sim_id,
+          true_params = params_true,
+          fitted_params = NULL,
+          error = "Fitting failed - no parameters returned"
+        ))
+      }
+      
+      # Ensure fitted parameters respect bounds
+      if (!is.null(param_bounds)) {
+        for (name in names(result$parameters)) {
+          if (name %in% names(param_bounds)) {
+            lower_bound <- param_bounds[[name]][1]
+            upper_bound <- param_bounds[[name]][2]
+            
+            # Check if parameter is out of bounds
+            if (result$parameters[[name]] < lower_bound || 
+                result$parameters[[name]] > upper_bound) {
+              
+              # Clamp to bounds
+              result$parameters[[name]] <- max(lower_bound, 
+                                              min(upper_bound, 
+                                                  result$parameters[[name]]))
+              
+              # Add warning to result
+              if (is.null(result$warnings)) {
+                result$warnings <- paste("Parameter", name, "was out of bounds and clamped")
+              } else {
+                result$warnings <- paste(result$warnings, "\nParameter", name, 
+                                        "was out of bounds and clamped")
+              }
+            }
+          }
+        }
+      }
+      
+      # Return successful fit
+      list(
+        sim_id = sim_id,
+        true_params = params_true,
+        fitted_params = result$parameters,
+        warnings = if (!is.null(result$warnings)) result$warnings else NULL,
+        error = NULL
+      )
+    }, error = function(e) {
+      message("Error in fitting simulation ", sim_id, ": ", e$message)
+      return(list(
+        sim_id = sim_id,
+        true_params = params_true,
+        fitted_params = NULL,
+        error = paste("Fitting error:", e$message)
+      ))
+    })
+    
+    return(fit_result)
+  }
+  
+  # Export worker function
+  clusterExport(cl, "worker_function", envir = environment())
+  
+  # Run simulations in parallel
+  cat("\nStarting parameter recovery with", n_sims, "simulations...\n")
+  
+  sim_ids <- 1:n_sims
+  
+  if (requireNamespace("pbapply", quietly = TRUE)) {
+    results <- pbapply::pblapply(sim_ids, worker_function, cl = cl)
+  } else {
+    results <- parLapply(cl, sim_ids, worker_function)
+  }
+  
+  # Process results
+  cat("\nProcessing results...\n")
+  
+  # Extract true and fitted parameter sets
+  true_params <- lapply(results, function(res) res$true_params)
+  fitted_params <- lapply(results, function(res) res$fitted_params)
+  errors <- lapply(results, function(res) res$error)
+  warnings <- lapply(results, function(res) res$warnings)
+  
+  # Count successful simulations
+  n_success <- sum(sapply(errors, is.null))
+  success_rate <- n_success / n_sims
+  
+  # Count simulations with warnings (parameter clamping)
+  n_warnings <- sum(!sapply(warnings, is.null))
+  
+  cat("Completed", n_sims, "simulations with", n_success, "successful fits\n")
+  cat("Success rate:", round(100 * success_rate, 1), "%\n")
+  if (n_warnings > 0) {
+    cat("Warning: ", n_warnings, "simulations had parameters clamped to stay within bounds\n")
+  }
+  
+  # Calculate correlations for free parameters
+  correlations <- list()
+  
+  for (param in free_params) {
+    cat("\nCalculating correlation for parameter:", param, "\n")
+    
+    # Extract true and fitted values
+    true_values <- sapply(true_params, function(p) {
+      if (is.null(p) || is.null(p[[param]])) NA else p[[param]]
+    })
+    
+    fitted_values <- sapply(fitted_params, function(p) {
+      if (is.null(p) || is.null(p[[param]])) NA else p[[param]]
+    })
+    
+    # Handle plan_depth special case (it's stored as "k" in fitted_params)
+    if (param == "plan_depth") {
+      fitted_values <- sapply(results, function(res) {
+        if (is.null(res$fitted_params) || is.null(res$fit_result$k)) NA else res$fit_result$k
+      })
+    }
+    
+    # Remove NAs
+    valid <- !is.na(true_values) & !is.na(fitted_values)
+    true_valid <- true_values[valid]
+    fitted_valid <- fitted_values[valid]
+    
+    # Check if we have enough data points and variance
+    if (length(true_valid) >= 5 && 
+        stats::var(true_valid) > 1e-6 && 
+        stats::var(fitted_valid) > 1e-6) {
+      
+      # Calculate correlation
+      corr <- stats::cor(true_valid, fitted_valid)
+      correlations[[param]] <- corr
+      cat("  Correlation r =", round(corr, 3), 
+          "based on", length(true_valid), "valid data points\n")
+      cat("  True values range: [", min(true_valid), ", ", max(true_valid), "]\n")
+      cat("  Fitted values range: [", min(fitted_valid), ", ", max(fitted_valid), "]\n")
+      
+    } else {
+      correlations[[param]] <- NA
+      cat("  Insufficient data or variance for correlation calculation\n")
+      cat("  Valid data points:", length(true_valid), "\n")
+      if (length(true_valid) > 0) {
+        cat("  True values variance:", stats::var(true_valid), "\n")
+        cat("  Fitted values variance:", stats::var(fitted_valid), "\n")
+      }
+    }
+  }
+  
+  # Create recovery dataframe
+  recovery_df <- data.frame()
+  
+  for (i in 1:length(results)) {
+    row <- data.frame(sim_id = i)
+    
+    # Add true parameters
+    for (param in names(true_params[[i]])) {
+      row[[paste0("true_", param)]] <- true_params[[i]][[param]]
+    }
+    
+    # Add fitted parameters
+    if (!is.null(fitted_params[[i]])) {
+      for (param in names(fitted_params[[i]])) {
+        row[[paste0("fit_", param)]] <- fitted_params[[i]][[param]]
+      }
+      
+      # Add plan_depth/k
+      if (!is.null(results[[i]]$fit_result$k)) {
+        row[["fit_plan_depth"]] <- results[[i]]$fit_result$k
+      }
+    }
+    
+    # Add error and warning info
+    row$error <- ifelse(is.null(errors[[i]]), NA, as.character(errors[[i]]))
+    row$warning <- ifelse(is.null(warnings[[i]]), NA, as.character(warnings[[i]]))
+    row$converged <- is.null(errors[[i]])
+    
+    recovery_df <- rbind(recovery_df, row)
+  }
+  
+  # Return results
+  list(
+    recovery_df = recovery_df,
+    correlations = correlations,
+    success_rate = success_rate,
+    true_params = true_params,
+    fitted_params = fitted_params,
+    param_fixed = param_fixed,
+    param_bounds = param_bounds,
+    n_warnings = n_warnings
+  )
+}
+
+
+
+#' Plot parameter recovery results
+#' 
+#' @param recovery_results Results from param_recovery_experiment
+#' @param output_dir Directory to save plots
+#' @param save_plots Whether to save plots to files
+#' @return Named list of ggplot objects
+plot_recovery_results <- function(recovery_results, output_dir = NULL, save_plots = FALSE) {
+  # Check if ggplot2 is available
+  if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    stop("ggplot2 package is required for plotting")
+  }
+  
+  library(ggplot2)
+  
+  # Create output directory if needed
+  if (save_plots && !is.null(output_dir)) {
+    if (!dir.exists(output_dir)) {
+      dir.create(output_dir, recursive = TRUE)
+    }
+  }
+  
+  # Extract data
+  df <- recovery_results$recovery_df
+  
+  # Get names of all parameters (fixed and free)
+  all_params <- unique(gsub("^true_", "", grep("^true_", names(df), value = TRUE)))
+  
+  # Get fixed parameters
+  fixed_params <- names(recovery_results$param_fixed)
+  
+  # Get free parameters (those not fixed)
+  free_params <- setdiff(all_params, fixed_params)
+  
+  # Create plots
+  plots <- list()
+  
+  for (param in all_params) {
+    true_col <- paste0("true_", param)
+    fit_col <- paste0("fit_", param)
+    
+    if (!true_col %in% names(df) || !fit_col %in% names(df)) {
+      next
+    }
+    
+    # Filter out rows with NA values
+    plot_df <- df[!is.na(df[[true_col]]) & !is.na(df[[fit_col]]), ]
+    
+    if (param %in% fixed_params) {
+      # Create a "fixed parameter" plot
+      plots[[param]] <- ggplot() + 
+        annotate("text", x = 0.5, y = 0.5, 
+                 label = paste("Parameter", param, "was fixed at", recovery_results$param_fixed[[param]])) +
+        theme_minimal() +
+        labs(title = paste(param, "(Fixed)"))
+    } else if (nrow(plot_df) < 3) {
+      # Not enough data for meaningful plot
+      plots[[param]] <- ggplot() + 
+        annotate("text", x = 0.5, y = 0.5, label = "Insufficient data") +
+        theme_minimal() +
+        labs(title = paste(param, "- Insufficient data"))
+    } else {
+      # Calculate correlation
+      r <- cor(plot_df[[true_col]], plot_df[[fit_col]])
+      
+      # Create scatter plot
+      plots[[param]] <- ggplot(plot_df, aes_string(x = true_col, y = fit_col)) +
+        geom_point(color = "blue", alpha = 0.7) +
+        geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red") +
+        geom_smooth(method = "lm", se = TRUE, color = "blue") +
+        labs(
+          title = paste(param, "Recovery"),
+          subtitle = paste("Correlation:", round(r, 2)),
+          x = paste("True", param),
+          y = paste("Fitted", param)
+        ) +
+        theme_minimal()
+    }
+    
+    # Save plot if requested
+    if (save_plots && !is.null(output_dir)) {
+      filename <- file.path(output_dir, paste0("recovery_", param, ".png"))
+      ggsave(filename, plots[[param]], width = 6, height = 5)
+    }
+  }
+  
+  # Create combined plot if requested
+  if (save_plots && !is.null(output_dir) && requireNamespace("gridExtra", quietly = TRUE)) {
+    combined_plot <- gridExtra::grid.arrange(
+      grobs = plots,
+      ncol = 2
+    )
+    
+    filename <- file.path(output_dir, "recovery_combined.png")
+    ggsave(filename, combined_plot, width = 12, height = 10)
+  }
+  
+  return(plots)
+}
+```
+
+
+```{r}
+# Example 5: Run parameter recovery analysis
+recovery_results_test <- param_recovery_experiment(
+  n_sims = 9,
+  param_fixed = list(envy=0,guilt=1),
+  game_size = 25,
+  max_k = 2,
+  n_multistart = 2,
+  n_cores = 9
+)
+print(recovery_results_test$correlations)
+print(paste("Success rate:", recovery_results_test$success_rate))
+
+# Plot recovery results
+recovery_plots <- plot_recovery_results(
+  recovery_results_test,
+  output_dir = "recovery_plots",
+  save_plots = TRUE
+)
+```
+
+
+# interactive recovery analysis
+
+```{r}
+run_recovery_analysis <- function(n_sims = 50,
+                                 game_size = 25,
+                                 max_k = 3,
+                                 n_cores = parallel::detectCores() - 1,
+                                 n_multistart = 10,
+                                 save_plots = TRUE,
+                                 output_dir = "recovery_plots") {
+  # Track timing
+  start_time <- Sys.time()
+  
+  # Step 1: Run parameter recovery experiment with all parameters free
+  cat("Running parameter recovery experiment with all parameters free...\n")
+  
+  # Default parameter priors and bounds
+  default_priors <- list(
+    envy = list(mean = 1.5, sd = 0.7),
+    guilt = list(mean = 0.5, sd = 0.3),
+    temp = list(mean = 3.0, sd = 1.5),
+    sensitivity = list(mean = 0.3, sd = 0.2),
+    alpha_Q = list(mean = 0.4, sd = 0.2),
+    plan_depth = list(mean = 2, sd = 0.8)
+  )
+  
+  default_bounds <- list(
+    envy = c(0, 6), 
+    guilt = c(0, 2), 
+    temp = c(0.1, 15), 
+    sensitivity = c(0.01, 2), 
+    alpha_Q = c(0.01, 0.99),
+    plan_depth = c(1, max_k)
+  )
+  
+  all_free_recovery <- param_recovery_experiment(
+    n_sims = n_sims,
+    param_priors = default_priors,  # Use default priors
+    param_bounds = default_bounds,  # Use default bounds
+    param_fixed = list(),          # No fixed parameters
+    game_size = game_size,
+    max_k = max_k,
+    n_multistart = n_multistart,
+    n_cores = n_cores
+  )
+  
+  # Step 2: Display parameter identifiability results
+  cat("\nParameter Recovery Analysis Results:\n")
+  cat("------------------------------------\n")
+  
+  correlations <- all_free_recovery$correlations
+  
+  # Display recovery quality for each parameter
+  for (param in names(correlations)) {
+    cat(param, ": ")
+    
+    if (is.na(correlations[[param]])) {
+      cat("Insufficient data for correlation calculation\n")
+    } else if (correlations[[param]] > 0.8) {
+      cat("Excellent recovery (r=", round(correlations[[param]], 2), 
+          "). Recommended: Keep as free parameter.\n", sep="")
+    } else if (correlations[[param]] > 0.6) {
+      cat("Good recovery (r=", round(correlations[[param]], 2), 
+          "). Recommended: Keep as free parameter.\n", sep="")
+    } else if (correlations[[param]] > 0.4) {
+      cat("Moderate recovery (r=", round(correlations[[param]], 2), 
+          "). Consider fixing or using informative priors.\n", sep="")
+    } else {
+      cat("Poor recovery (r=", round(correlations[[param]], 2), 
+          "). Consider fixing this parameter.\n", sep="")
+    }
+  }
+  
+  # Step 3: Save or display plots
+  if (save_plots) {
+    cat("\nGenerating recovery plots for all free parameters...\n")
+    
+    # Save plots for all free parameters
+    plots_all_free <- plot_recovery_results(
+      all_free_recovery,
+      output_dir = output_dir,
+      save_plots = TRUE
+    )
+    
+    cat("Plots saved to directory:", normalizePath(output_dir), "\n")
+  }
+  
+  # Step 4: Interactive determination of parameters to fix
+  cat("\nBased on the plots and correlations, you can now choose which parameters to fix.\n")
+  
+  # Suggested literature values for reference
+  suggested_values <- list(
+    envy = 1.0,        # Common value for envy (disadvantageous inequality)
+    guilt = 0.5,       # Common value for guilt (advantageous inequality)
+    temp = 3.0,        # Common softmax temperature
+    sensitivity = 0.3, # Common transition sensitivity
+    alpha_Q = 0.3      # Common learning rate
+  )
+  
+  # Ask which parameters to fix
+  params_to_fix <- c()
+  param_fixed <- list()
+  
+  cat("\nFor each parameter, enter 'y' to fix it or 'n' to keep it free.\n")
+  
+  for (param in names(correlations)) {
+    # Skip plan_depth as it's typically estimated as a discrete parameter
+    if (param == "plan_depth") next
+    
+    # Check if the parameter exists in the suggested values
+    suggestion_text <- ""
+    if (param %in% names(suggested_values)) {
+      suggestion_text <- paste0(" [Suggested value: ", suggested_values[[param]], "]")
+    }
+    
+    fix_response <- readline(prompt = paste0("Fix parameter '", param, "'? (y/n): "))
+    
+    if (tolower(substr(fix_response, 1, 1)) == "y") {
+      value_prompt <- paste0("Enter value to fix '", param, "' at", suggestion_text, ": ")
+      value_input <- readline(prompt = value_prompt)
+      
+      # Validate numeric input
+      value <- tryCatch({
+        as.numeric(value_input)
+      }, warning = function(w) {
+        cat("Warning: Invalid number. Using suggested value instead.\n")
+        return(suggested_values[[param]] %||% 0.5)  # Use suggested value or 0.5 as fallback
+      }, error = function(e) {
+        cat("Error: Invalid input. Using suggested value instead.\n")
+        return(suggested_values[[param]] %||% 0.5)  # Use suggested value or 0.5 as fallback
+      })
+      
+      params_to_fix <- c(params_to_fix, param)
+      param_fixed[[param]] <- value
+      cat("Parameter '", param, "' will be fixed at ", value, "\n", sep="")
+    } else {
+      cat("Parameter '", param, "' will remain free.\n", sep="")
+    }
+  }
+  
+  # Step 5: Run recovery with user-specified fixed parameters
+  fixed_recovery <- NULL
+  if (length(params_to_fix) > 0) {
+    cat("\nDo you want to run a second recovery analysis with these fixed parameters? (y/n): ")
+    run_second <- readline()
+    
+    if (tolower(substr(run_second, 1, 1)) == "y") {
+      cat("\nRunning parameter recovery with fixed parameters:\n")
+      for (param in names(param_fixed)) {
+        cat("  ", param, " = ", param_fixed[[param]], "\n", sep="")
+      }
+      
+      # Get the list of free parameters (excluding fixed ones)
+      free_params <- setdiff(names(correlations), names(param_fixed))
+      cat("\nFree parameters for this recovery run:\n")
+      for (param in free_params) {
+        cat("  ", param, "\n", sep="")
+      }
+      
+      # Define parameter priors and bounds for free parameters only
+      param_priors <- list()
+      param_bounds <- list()
+      
+      # Only include priors and bounds for free parameters
+      for (param in free_params) {
+        if (param %in% names(default_priors)) {
+          param_priors[[param]] <- default_priors[[param]]
+        }
+        if (param %in% names(default_bounds)) {
+          param_bounds[[param]] <- default_bounds[[param]]
+        }
+      }
+      
+      # Verify we have necessary parameter configurations
+      cat("\nParameter priors for free parameters:\n")
+      for (param in names(param_priors)) {
+        cat("  ", param, ": mean=", param_priors[[param]]$mean, 
+            ", sd=", param_priors[[param]]$sd, "\n", sep="")
+      }
+      
+      cat("\nParameter bounds for free parameters:\n")
+      for (param in names(param_bounds)) {
+        cat("  ", param, ": [", param_bounds[[param]][1], ", ", 
+            param_bounds[[param]][2], "]\n", sep="")
+      }
+      
+      # Add debugging for the param_fixed list
+      cat("\nFixed parameters configuration:\n")
+      if (length(param_fixed) > 0) {
+        for (param in names(param_fixed)) {
+          cat("  ", param, " = ", param_fixed[[param]], "\n", sep="")
+        }
+      } else {
+        cat("  None (all parameters are free)\n")
+      }
+      
+      # Run parameter recovery with fixed parameters
+      fixed_recovery <- param_recovery_experiment(
+        n_sims = n_sims,
+        param_priors = param_priors,   # Priors for free parameters
+        param_bounds = param_bounds,   # Bounds for free parameters
+        param_fixed = param_fixed,     # Fixed parameter values
+        game_size = game_size,
+        max_k = max_k,
+        n_multistart = n_multistart,
+        n_cores = n_cores
+      )
+      
+      # Verify the correlation calculation
+      if (!is.null(fixed_recovery)) {
+        cat("\nChecking recovery results structure:\n")
+        cat("Recovery object contains:", paste(names(fixed_recovery), collapse=", "), "\n")
+        
+        if (!is.null(fixed_recovery$true_params) && !is.null(fixed_recovery$fitted_params)) {
+          cat("Number of simulations completed:", length(fixed_recovery$true_params), "\n")
+          
+          # Check first simulation to verify structure
+          if (length(fixed_recovery$true_params) > 0) {
+            cat("\nParameters from first simulation:\n")
+            cat("True parameters:", paste(names(fixed_recovery$true_params[[1]]), 
+                                         collapse=", "), "\n")
+            cat("Fitted parameters:", paste(names(fixed_recovery$fitted_params[[1]]), 
+                                           collapse=", "), "\n")
+            
+            # Print values for first simulation
+            cat("\nValues from first simulation:\n")
+            cat("True values:\n")
+            for (param in names(fixed_recovery$true_params[[1]])) {
+              cat("  ", param, " = ", fixed_recovery$true_params[[1]][[param]], "\n", sep="")
+            }
+            
+            cat("Fitted values:\n")
+            for (param in names(fixed_recovery$fitted_params[[1]])) {
+              cat("  ", param, " = ", fixed_recovery$fitted_params[[1]][[param]], "\n", sep="")
+            }
+          }
+          
+          # Calculate correlations manually for each free parameter
+          cat("\nManually calculating correlations for free parameters...\n")
+          manual_correlations <- list()
+          
+          for (param in free_params) {
+            cat("Processing parameter:", param, "\n")
+            
+            # Extract true and fitted values for this parameter
+            true_values <- sapply(fixed_recovery$true_params, function(x) {
+              if (!is.null(x[[param]])) x[[param]] else NA
+            })
+            
+            fitted_values <- sapply(fixed_recovery$fitted_params, function(x) {
+              if (!is.null(x[[param]])) x[[param]] else NA
+            })
+            
+            # Remove NA values
+            valid_indices <- !is.na(true_values) & !is.na(fitted_values)
+            true_values <- true_values[valid_indices]
+            fitted_values <- fitted_values[valid_indices]
+            
+            cat("  Number of valid data points:", sum(valid_indices), "\n")
+            
+            if (length(true_values) > 5 && length(fitted_values) > 5 && 
+                stats::var(true_values, na.rm = TRUE) > 1e-6 && 
+                stats::var(fitted_values, na.rm = TRUE) > 1e-6) {
+              
+              cat("  True values range: [", min(true_values), ", ", max(true_values), "]\n", sep="")
+              cat("  Fitted values range: [", min(fitted_values), ", ", max(fitted_values), "]\n", sep="")
+              cat("  True values variance:", stats::var(true_values, na.rm = TRUE), "\n")
+              cat("  Fitted values variance:", stats::var(fitted_values, na.rm = TRUE), "\n")
+              
+              # Calculate correlation
+              manual_correlations[[param]] <- stats::cor(true_values, fitted_values)
+              cat("  Calculated correlation:", round(manual_correlations[[param]], 2), "\n")
+            } else {
+              cat("  Insufficient variation in values for correlation calculation\n")
+              manual_correlations[[param]] <- NA
+            }
+          }
+          
+          # Update correlations in the recovery object
+          fixed_recovery$correlations <- manual_correlations
+        } else {
+          cat("Missing true_params or fitted_params in recovery results.\n")
+        }
+      }
+      
+      # Display and save plots for fixed parameters
+      if (save_plots && !is.null(fixed_recovery)) {
+        cat("\nGenerating recovery plots with fixed parameters...\n")
+        
+        plots_fixed <- tryCatch({
+          plot_recovery_results(
+            fixed_recovery,
+            output_dir = output_dir,
+            save_plots = TRUE
+          )
+        }, error = function(e) {
+          cat("\nError generating plots:", conditionMessage(e), "\n")
+          return(NULL)
+        })
+        
+        if (!is.null(plots_fixed)) {
+          cat("Plots saved to directory:", normalizePath(output_dir), "\n")
+        }
+      }
+      
+      # Display fixed parameter recovery results
+      if (!is.null(fixed_recovery$correlations)) {
+        cat("\nParameter Recovery Results with Fixed Parameters:\n")
+        cat("-----------------------------------------------\n")
+        
+        for (param in names(fixed_recovery$correlations)) {
+          cat(param, ": ")
+          
+          if (is.na(fixed_recovery$correlations[[param]])) {
+            cat("Insufficient data for correlation calculation\n")
+          } else if (fixed_recovery$correlations[[param]] > 0.8) {
+            cat("Excellent recovery (r=", round(fixed_recovery$correlations[[param]], 2), 
+                ")\n", sep="")
+          } else if (fixed_recovery$correlations[[param]] > 0.6) {
+            cat("Good recovery (r=", round(fixed_recovery$correlations[[param]], 2), 
+                ")\n", sep="")
+          } else if (fixed_recovery$correlations[[param]] > 0.4) {
+            cat("Moderate recovery (r=", round(fixed_recovery$correlations[[param]], 2), 
+                ")\n", sep="")
+          } else {
+            cat("Poor recovery (r=", round(fixed_recovery$correlations[[param]], 2), 
+                ")\n", sep="")
+          }
+        }
+      } else {
+        cat("\nNo correlation data available for fixed parameter recovery.\n")
+      }
+    } else {
+      cat("\nSkipping second recovery analysis.\n")
+    }
+  } else {
+    cat("\nNo parameters were fixed. Results based on all free parameters.\n")
+  }
+  
+  # Calculate total runtime
+  end_time <- Sys.time()
+  total_duration <- as.numeric(difftime(end_time, start_time, units = "secs"))
+  
+  cat("\nTotal runtime: ", 
+      sprintf("%.1f minutes (%.1f hours)\n", 
+              total_duration/60, total_duration/3600))
+  
+  # Return all results
+  list(
+    all_free_recovery = all_free_recovery,
+    fixed_recovery = fixed_recovery,
+    params_to_fix = params_to_fix,
+    param_fixed = param_fixed,
+    runtime = list(
+      start_time = start_time,
+      end_time = end_time,
+      total_seconds = total_duration
+    )
+  )
+}
+
+# Helper to handle NULL with a default value (similar to %||% in purrr)
+`%||%` <- function(x, y) if (is.null(x)) y else x
+
+```
+
+
+
+
+
+```{r}
+# Run the interactive parameter recovery analysis
+recovery_results <- run_recovery_analysis(
+  n_sims = 300,        # Start with a smaller number for testing
+  game_size = 25,
+  max_k = 3,
+  n_cores = 9,
+  n_multistart = 5,
+  save_plots = TRUE
+)
+
+# Save results to a file
+saveRDS(recovery_results, "recovery_results.rds")
+
+
+# To load results later:
+# loaded_results <- readRDS("recovery_results.rds")
+
+
+```
+
+```{r}
+# Combine both correlation sets
+all_free_corrs <- data.frame(
+  parameter = names(recovery_results$all_free_recovery$correlations),
+  correlation = unlist(recovery_results$all_free_recovery$correlations),
+  model = "All Free Parameters",
+  stringsAsFactors = FALSE
+)
+
+fixed_corrs$model <- "After Fixing Parameters"
+
+combined_corrs <- rbind(all_free_corrs, fixed_corrs)
+
+# Create combined plot
+ggplot(combined_corrs, aes(x = parameter, y = correlation, fill = model)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  coord_flip() +
+  labs(title = "Parameter Recovery Comparison",
+       x = "Parameter", 
+       y = "Correlation",
+       fill = "Model") +
+  theme_minimal() +
+  #geom_hline(yintercept = c(0.4, 0.6, 0.8), linetype = "dashed", color = "gray50") +
+  scale_y_continuous(limits = c(-0.5, 0.5))
+
+ggsave("parameter_recovery_comparison.png", width = 10, height = 6)
+```
+
+
+
+
+
+# Usage
+
+```{r}
+# Example 1: Fit model to a single participant's data
+first_participant <- unique(final_data$playerId)[1]
+test_data <- final_data %>% filter(playerId == first_participant)
+fit_result <- fit_participant_mb(test_data, max_k = 2, hierarchical = TRUE, n_multistart = 5)
+print(fit_result)
+
+# Example 2: Fit model to all participants in parallel
+results_mb <- fit_all_participants_mb(
+  data = final_data,
+  max_k = 3,
+  hierarchical = TRUE,
+  n_multistart = 20,
+  n_cores = 8
+)
+print(head(results_mb))
+summary(attr(results_mb, "summary"))
+write.csv(results_mb, "results_mb.csv", row.names = FALSE)
+
+# Example 3: Visualize parameter distributions
+library(ggplot2)
+df_long <- results_mb %>%
+  dplyr::select(-c("participant", "nll", "aic", "bic", "error", "approach")) %>%
+  tidyr::pivot_longer(
+    cols = c("envy", "guilt", "temp", "sensitivity", "alpha_Q", "best_k"),
+    names_to = "parameter", 
+    values_to = "value"
+  )
+
+ggplot(df_long, aes(x = value)) +
+  geom_histogram(bins = 20, fill = "skyblue", color = "black") +
+  facet_wrap(~ parameter, scales = "free") +
+  labs(title = "Parameter Distributions Across Participants",
+       x = "Value", y = "Frequency") +
+  theme_minimal()
+
+# Example 4: Test model on held-out data
+results_test <- fit_and_test_all_participants(
+  data = final_data,
+  max_k = 3,
+  hierarchical = TRUE,
+  n_multistart = 10,
+  n_cores = 8,
+  train_cutoff = 20
+)
+print(head(results_test))
+write.csv(results_test, "results_mb_test.csv", row.names = FALSE)
+
+# Example 5: Run parameter recovery analysis
+recovery_results <- param_recovery_experiment(
+  n_sims = 50,
+  game_size = 25,
+  max_k = 3,
+  n_multistart = 10,
+  n_cores = 8
+)
+print(recovery_results$correlations)
+print(paste("Success rate:", recovery_results$success_rate))
+
+# Plot recovery results
+recovery_plots <- plot_recovery_results(
+  recovery_results,
+  output_dir = "recovery_plots",
+  save_plots = TRUE
+)
+```
+
+
+
+

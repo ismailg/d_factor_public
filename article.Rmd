@@ -1,12 +1,12 @@
 ---
-title: "artcile"
+title: "DFP RTG"
 author: "Ismail Guennouni"
 date: "`r Sys.Date()`"
 output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(echo = FALSE, include=FALSE, warning = FALSE)
 ```
 
 
@@ -88,7 +88,7 @@ response_probs <- as.data.frame(cbind(investment,Anti_social,Neutral,Pro_social)
    mutate(across(Investor_state, factor, levels=c("low-trust","medium-trust","high-trust")))
 ```
 
-```{r, include=F}
+```{r, include=T}
 
 plotinvHMM <- ggplot(response_probs,                            
        aes(x = investment,
@@ -186,7 +186,7 @@ plot_HMM_transitions <- function(ns, pars_mat) {
 ```
 
 
-```{r}
+```{r, include=TRUE}
 
 # Parameters for HMM human-like Transition Function
 unhappy_pars <- rbind(c(0,0), c(-3.366027, 0.40910797 ), c(-3.572619,0.08137274)) 
@@ -208,21 +208,7 @@ print(plotInvVol)
 
 
 ```
-
-
-
-
-
-
-# Results
-
-
-
-```{r}
-library(papaja)
-```
-
-
+## Participants
 
 
 <!-- Load preprocessed data -->
@@ -277,9 +263,209 @@ final_data <- final_data %>%
 # write.csv(anonym_data, "anonym_RTG_data.csv")
 ```
 
+```{r}
+demographics <- read.csv("data/demographic_data.csv")
+# demographics - contains demographic data with Participant.id, Age, Sex, etc.
+# final_data - contains other data with playerId column
+
+# Extract demographic information for participants in final_data
+matching_participants <- demographics[demographics$Participant.id %in% final_data$id, ]
+
+# Select only the relevant columns we need
+demographic_subset <- matching_participants[, c("Participant.id", "Age", "Sex", "Country.of.birth", "Ethnicity.simplified")]
+
+# Calculate gender proportions
+gender_counts <- table(demographic_subset$Sex)
+gender_proportions <- prop.table(gender_counts) * 100
+
+# Calculate mean age
+mean_age <- mean(as.numeric(demographic_subset$Age), na.rm = TRUE)
+sd_age <- sd(as.numeric(demographic_subset$Age), na.rm = TRUE)
+
+# Print results
+print("Gender Distribution:")
+print(gender_counts)
+print(paste0("Proportion of Male participants: ", round(gender_proportions["Male"], 1), "%"))
+print(paste0("Proportion of Female participants: ", round(gender_proportions["Female"], 1), "%"))
+print(paste0("Mean age: ", round(mean_age, 1), " years"))
+print(paste0("SD age: ", round(sd_age, 1), " years"))
+
+# Optional: Create a bar plot for gender distribution
+barplot(gender_counts, main="Gender Distribution", 
+        col=c("lightblue", "pink"), 
+        ylab="Number of Participants")
+```
 
 
-### Distribution of D factor and its subscales scores: 
+To have participants with large differences in the D factor of personality, a total of 1243
+participants were pre-screened on the Prolific Academic platform
+(prolific.co) using the 16 item Dark Factor of Personality Questionnaire (D16) to
+finally select two similarly sized groups: One with high D factor scores (90th percentile or higher, D score
+\> 42, N=91) and the other with low D factor scores (10th percentile,  score \< 22, N=92)
+totalling 183 participants (44% female). These were then invited through
+prolific to take part in the main experiment. 
+
+To determine the appropriate sample size, we conducted an a priori power analysis using Monte Carlo simulations with the *simr* package in R. The analysis specifically targeted the three-way interaction between d-score, opponent type (stable vs. volatile), and investment level. Parameters for the simulation were based on previous studies, with an expected effect size of $-0.1$ (correlation between d-score and returns), alpha level of $0.05$, and desired power of $0.90$. Starting with 50 participants, we iteratively generated synthetic data for a task with $25$ rounds per condition and fitted linear mixed-effects models with random intercepts for participants. The simulations incorporated realistic parameter estimates and fixed effects derived from previous research using the same paradigm. This analysis indicated that a sample of 180 participants would provide sufficient power ( more than $90%$) to detect the hypothesized three-way interaction.
+
+```{r}
+# Identify ethnic distribution and country of birth from demographics data
+
+# Calculate ethnicity distribution
+ethnicity_counts <- table(demographic_subset$Ethnicity.simplified)
+ethnicity_percentages <- prop.table(ethnicity_counts) * 100
+
+# Print ethnicity results
+print("Ethnicity Distribution:")
+print(ethnicity_counts)
+print(paste0("Proportion of White participants: ", round(ethnicity_percentages["White"], 1), "%"))
+
+# Assuming there's a column named "Country.of.birth" or similar in your data
+# If the column has a different name, replace it accordingly
+country_counts <- table(demographic_subset$Country.of.birth)
+country_percentages <- prop.table(country_counts) * 100
+
+# Sort countries by frequency in descending order
+sorted_countries <- sort(country_counts, decreasing = TRUE)
+sorted_percentages <- prop.table(sorted_countries) * 100
+
+# Get number of unique countries
+unique_countries <- length(country_counts)
+
+# Print country of birth results
+print(paste0("Number of unique countries of birth: ", unique_countries))
+print("Top countries of birth:")
+for (i in 1:min(5, length(sorted_countries))) {
+  country_name <- names(sorted_countries)[i]
+  country_percent <- sorted_percentages[country_name]
+  print(paste0(country_name, ": ", round(country_percent, 1), "%"))
+}
+
+```
+
+
+The mean age of participants was $33.1$ years, with an $9.7$ years standard deviation. The majority of participants identified ethnically as White ($57$%). The online cohort registered $38$ unique countries of birth with the most frequent being South Africa ($24$%), the U.K ($20$%) followed by Poland ($5$%) and Greece ($4$%). Participants were paid a fixed fee of £4 plus a bonus payment dependent on their performance that averaged £0.5. Data was collected over multiple sessions between October and November 2024.
+
+## Design and Procedure
+
+The experiment employed a 2 (HMM Type: Human-like or Volatile) × 2 (D-Factor: High or Low) mixed design, with repeated measures on the HMM Type factor. Participants were pre-screened using the 16-item Dark Personality Factor Questionnaire, with individuals classified as either High D or Low D. Participants completed two phases of a Repeated Trust Game (RTG), playing 25 rounds in each phase against different Hidden Markov Model (HMM) investors: a "Human-like" HMM and a more "Responsive" Volatile HMM, with the order counterbalanced across participants. After each RTG phase, participants completed investor evaluations. The experiment concluded with a Turing test to assess perceived humanness of the AI partners, open-ended questions about the interaction, and a final debrief. The experimental interface was designed and implemented online using Empirica v1 [@almaatouq_empirica_2021], with an estimated completion time of 30 minutes per participant. The study received approval from the University of Heidelberg's Medical Faculty ethics commission (ID:S-708/2023) and the experiment was performed in accordance with the ethics board guidelines and regulations. All participants provided informed consent prior to their participation.
+
+
+## Tasks and Measures
+
+### Repeated Trust Game and HMM Investor
+
+Participants played a 25-round RTG [@joyce_trust_1995] in the trustee
+role against a computer-programmed investor. On each round the investor
+is endowed with 20 units and decides how much of that endowment to
+invest. This investment is tripled and the trustee then decides how to
+split this tripled amount between them and the investor. If the trustee
+returns more than one third of the amount, the investor makes a gain.
+Each player was represented with an icon with the participant always on
+the left of the screen and the co-player on the right. The participants
+were able to choose the icon that represents them at the start of the
+experiment. The icon representing the co-player changed at the start of
+each new game, to simulate a new interaction partner. Participants were
+not told they were facing computerised co-players. We chose to simulate
+the behavior of a human interaction partner through allowing for a delay
+whilst pairing with new opponents as the start of each game as well as
+programming the agents to respond during each round after a varying time
+lapse (randomly chosen between 5 and 10 seconds).
+
+The computerised investor consisted of a hidden Markov model (HMM)
+trained on an independent existing behavioral RTG data set of human
+investors. This data-driven approach thus sought to learn an investor
+strategy that mimics human-like interactions. The data set used for
+training consists of 388 ten round games with the same player (full
+details can be found in the Supplementary Information). On this data
+set, the HMM was inferred with three latent states that could be
+interpreted as reflecting a “low-trust”, a “medium-trust”, and a
+“high-trust” state. A separate output distribution, that maps each HMM
+state onto possible investments from 0 to 20 separately, is learned
+(Figure \@ref(fig:HMMPanels).B). In analogy to the latent states, these
+distributions can be interpreted as reflecting “low-trust”,
+“medium-trust”, or “high-trust” dispositions. Finally, the HMM is
+specified by transition probabilities that describe the transition
+between states. The probability of these transitions was modelled as a
+function of their net return (i.e return - investment) in the previous
+round (see Figure \@ref(fig:HMMPanels).C)). The initial state for the
+HMM investor in each instance of the game was set to the “mid-trust”
+state. Details on how the HMM state conditional probabilities and
+transition functions are specified can be found in the supplement.
+
+On all rounds, the investor’s actions were
+determined by randomly drawing an investment from the state-conditional
+distribution, with the state over rounds determined by randomly drawing
+the next state from the state-transition distribution as determined from
+the net return on the previous round (disregarding the net return
+immediately after the pre-programmed low investment rounds).
+
+## Investor types
+
+In addition to the human-like HMM resulting from fitting to existing datasets of dyadic play 1 , we created a more volatile HMM. This was achieved by adjusting the parameters of the human-like HMM to alter the state transition probabilities. Specifically, the transition probability for remaining in the “medium-trust” state was set to zero when net returns were singificantly non-nil. The resulting transition function is illustrated in Figure @ref(fig:HMMPanels).D. The state-conditional policies and the transition function in the other latent states remained unchanged.
+
+
+## Procedure
+
+At the start of the experiment, participants provided informed consent
+and were instructed the study would consist of three phases in which
+they would face a different other player. Participants were told their
+goal was to maximise the number of points in all phases. They were not
+told the number of rounds of each phase. Participants were randomly
+assigned to either face the Human-like of Volatile HMM first. The timeline of
+the experiment is shown in Figure \@ref(fig:HMMPanels).A. Game one
+consisted of a 25 round RTG in which participants took the role
+of trustee, facing the same investor over all 25 rounds. On each round,
+after being informed about the amount sent by the investor participants
+decided how much of the tripled investment to return to the investor,
+before continuing to the next round. Game 2 consisted of the exact same set up 
+as in game 1, except for the opponent faced.
+
+At the beginning of each game participants were
+told they would face a new player and had to wait to be paired with an
+available co-player. This simulated the waiting time in real social
+interaction tasks. After completing each RTG in each phase, participants
+rated how cooperative and trusting they perceived the co-player to be,
+and whether they would like to play with them again (all on a scale from
+1 to 10 with 10 being the most positive rating). After completing the
+two games, participants were asked whether
+they thought the other players were human or computer agents, to probe
+how well the agent can mimic human behavior, then asked to describe their 
+strategy for both games and finally debriefed and thanked for their participation.
+
+
+## Statistical Analysis
+
+To test whether participants behaved differently in the RTG depending on their D-factor group and opponent faced, we model the percentage
+return (percentage of tripled investment returned to investor) using a linear mixed effects model to participants returns, with Opponent (Human-like vs. Volatile HMM), The order of opponents (Volatile first = True or false), Investment, round number and D-factor (High vs Low D-factor score) as well as their interactions as fixed effects, and player-wise random intercepts and slopes for the Investment variable. The full specification of the statistical model can be found in the supplement. 
+
+The model was estimated using the `afex` package [@singmann_afex_2022]
+in R. More complex models with additional random effects could not be
+estimated reliably, and as such the estimated model can be considered to
+include the optimal random effects structure
+[@matuschek_balancing_2017]. A similar process was used to establish the
+random effects structures of linear mixed-effects models used to analyse
+the HMM agent investments as well as the participants' ratings of the
+co-players. There is no agreed upon way to calculate effect sizes for
+mixed effects models. Instead, we will report on testing differences in
+marginal means. For the $F$-tests, we used the Kenward-Roger
+approximation to the degrees of freedom, as implemented in the R package
+"afex". We Z-transform the Investment variable (subtract the overall
+investment mean and divide by overall standard deviation) as centering
+is beneficial to interpreting the main effects more easily in the
+presence of interactions. To probe significant interactions, we
+conducted planned contrasts using the `emmeans` package in R. Given that
+we were testing multiple pre-planned comparisons, we applied the "Sidak"
+correction to control for familywise error rate while maintaining
+reasonable statistical power. This approach allowed us to investigate
+specific hypotheses about the differential effects of our manipulation
+across phases and RS groups, while protecting against inflated Type I
+error rates.
+
+
+# Results
+
+
+<!-- ### Distribution of D factor and its subscales scores:  -->
 
 ```{r}
 library(stringr)
@@ -384,201 +570,254 @@ sub_scores
 
 ### Mean investment and return per round
 
+
+
 ```{r}
 library(dplyr)
+library(tidyr)
+library(lme4)
+library(broom.mixed)
 library(ggplot2)
 
-# Calculate means and standard errors
-means_by_round_d <- final_data %>%
-  group_by(d_level, roundNum) %>%
+# 1. Overall differences between high and low D-factor participants
+summary_stats <- final_data %>%
+  group_by(d_level) %>%
   summarise(
-    mean_investment = mean(investment),
-    mean_return = mean(return),
-    se_investment = sd(investment) / sqrt(n()),
-    se_return = sd(return) / sqrt(n()),
+    mean_investment = mean(investment, na.rm = TRUE),
+    sd_investment = sd(investment, na.rm = TRUE),
+    mean_return = mean(return, na.rm = TRUE),
+    sd_return = sd(return, na.rm = TRUE),
+    mean_return_pct = mean(return_pct, na.rm = TRUE),
+    sd_return_pct = sd(return_pct, na.rm = TRUE),
+    n = n()
+  )
+
+print("Overall Summary Statistics by D-factor Level:")
+print(summary_stats)
+
+# Simple t-tests for overall differences
+t_test_investment <- t.test(investment ~ d_level, data = final_data)
+t_test_return <- t.test(return ~ d_level, data = final_data)
+t_test_return_pct <- t.test(return_pct ~ d_level, data = final_data)
+
+print("T-test for Investment by D-factor:")
+print(t_test_investment)
+
+print("T-test for Return by D-factor:")
+print(t_test_return)
+
+print("T-test for Return Percentage by D-factor:")
+print(t_test_return_pct)
+
+```
+
+```{r}
+library(lme4)
+library(lmerTest)
+library(emmeans)
+
+
+# Test if differences increase in later rounds
+# Create early vs late game periods (excluding end-game)
+final_data <- final_data %>%
+  mutate(game_period = case_when(
+    roundNum <= 8 ~ "early",
+    roundNum > 8 & roundNum <= 16 ~ "mid",
+    roundNum > 16 ~ "late"
+  ))
+
+
+
+# Create factor variables 
+final_data$game_period <- factor(final_data$game_period, levels = c("early", "mid", "late"))
+final_data$d_level <- factor(final_data$d_level)
+
+# Remove last round as it is a different game: 
+
+data24 <- final_data %>% filter (roundNum < 25)
+
+# For HMM investments
+investment_means <- data24 %>%
+  group_by(d_level, game_period) %>%
+  summarize(
+    mean_investment = mean(investment, na.rm = TRUE),
+    sd_investment = sd(investment, na.rm = TRUE),
+    n = n(),
+    se_investment = sd_investment / sqrt(n)
+  )
+
+# For absolute returns
+return_means <- data24 %>%
+  group_by(d_level, game_period) %>%
+  summarize(
+    mean_return = mean(return, na.rm = TRUE),
+    sd_return = sd(return, na.rm = TRUE),
+    n = n(),
+    se_return = sd_return / sqrt(n)
+  )
+
+# For percentage returns
+pct_return_means <- data24 %>%
+  group_by(d_level, game_period) %>%
+  summarize(
+    mean_pct_return = mean(return_pct, na.rm = TRUE),
+    sd_pct_return = sd(return_pct, na.rm = TRUE),
+    n = n(),
+    se_pct_return = sd_pct_return / sqrt(n)
+  )
+
+# T-tests for each period
+t_test_results <- list()
+for(period in c("early", "mid", "late")) {
+  # Investment t-test
+  inv_data <- data24 %>% filter(game_period == period)
+  t_inv <- t.test(investment ~ d_level, data = inv_data)
+  
+  # Return t-test
+  ret_data <- data24 %>% filter(game_period == period)
+  t_ret <- t.test(return ~ d_level, data = ret_data)
+  
+  # Percent return t-test
+  pct_data <- data24 %>% filter(game_period == period)
+  t_pct <- t.test(return_pct ~ d_level, data = pct_data)
+  
+  t_test_results[[period]] <- list(
+    investment = t_inv,
+    return = t_ret,
+    pct_return = t_pct
+  )
+}
+
+# Print results
+print(investment_means)
+print(return_means)
+print(pct_return_means)
+print(t_test_results)
+
+```
+
+
+
+
+
+On average, investments and returns, as shown in Figure \@ref(fig:XXXX), fell within the documented range of 40-60% of the endowment for investments and 35-50% of the total yield for returns, as reported in previous studies [@charness_investment_2008; @fiedler_social_2011].
+
+
+Comparing high versus low D-factor participants across all rounds, we observed several behavioral differences. High D-factor participants received lower investments (`r papaja::apa_print(t_test_investment)$statistic`) and consistently returned less money to investors (`r papaja::apa_print(t_test_return)$statistic`). The difference in return percentage was statistically significant (`r papaja::apa_print(t_test_return_pct)$statistic`), with high D-factor participants returning approximately 2-4 percentage points less of the tripled investment. 
+
+
+We then examined differences in trust game behavior between participants with high and low Dark Factor of Personality (D-factor) scores across three game periods: early (rounds 1-8), mid (rounds 9-16), and late (rounds 17+ excluding the alst round). We compared HMM investments, absolute returns, and percentage returns between the two groups using Welch's t-tests. We excluded the last round and analysed that data separately as participants were told it was the last interaction in that round. 
+
+Whilst there were no significant difference in investment received and percentage returns sent by the participants  between high_D and low_D groups during early and mid periods, significant differences emerged for all three measures during the late period. The HMM invested significantly *less* in high_D participants than low_D participants (`r sprintf("t(%1.2f) = %1.2f, p = %1.3e", t_test_results$late$investment$parameter, t_test_results$late$investment$statistic, t_test_results$late$investment$p.value)`). Furthermore, high_D participants sent back significantly lower absolute returns (`r sprintf("t(%1.2f) = %1.2f, p = %1.3e", t_test_results$late$return$parameter, t_test_results$late$return$statistic, t_test_results$late$return$p.value)`) and lower percentage returns (`r sprintf("t(%1.2f) = %1.2f, p = %1.3e", t_test_results$late$pct_return$parameter, t_test_results$late$pct_return$statistic, t_test_results$late$pct_return$p.value)`) compared to low_D participants.
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r, include=T}
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+
+# Calculate percentage return and add game period
+data_with_pct <- data24 %>%
+  mutate(
+    return_pct = return / (3 * investment),
+    # Categorize rounds into early, middle, and late periods
+    game_period = case_when(
+      roundNum <= 8 ~ "Early\n(1-8)",
+      roundNum > 8 & roundNum <= 16 ~ "Middle\n(9-16)",
+      roundNum > 16 ~ "Late\n(17-25)"
+    ),
+    # Convert to factor to preserve order
+    game_period = factor(game_period, levels = c("Early\n(1-8)", "Middle\n(9-16)", "Late\n(17-25)"))
+  )
+
+# Calculate aggregated statistics for each period
+period_stats <- data_with_pct %>%
+  group_by(d_level, game_period) %>%
+  summarise(
+    mean_return_pct = mean(return_pct, na.rm = TRUE),
+    se_return_pct = sd(return_pct, na.rm = TRUE) / sqrt(n()),
     .groups = 'drop'
   )
 
-# Create plot with error bands
-ggplot(means_by_round_d, aes(x = roundNum)) +
-  # Add error bands
-  geom_ribbon(aes(ymin = mean_investment - se_investment, 
-                  ymax = mean_investment + se_investment,
-                  fill = "Investment"), 
-              alpha = 0.2) +
-  geom_ribbon(aes(ymin = mean_return - se_return,
-                  ymax = mean_return + se_return,
-                  fill = "Return"), 
-              alpha = 0.2) +
-  # Add lines
-  geom_line(aes(y = mean_investment, color = "Investment"), size = 1) +
-  geom_line(aes(y = mean_return, color = "Return"), size = 1) +
-  # Facet by D-factor level
-  facet_wrap(~d_level) +
-  # Set colors
-  scale_color_manual(values = c("Investment" = "blue", "Return" = "red")) +
-  scale_fill_manual(values = c("Investment" = "blue", "Return" = "red")) +
+# Calculate differences for annotations
+diff_stats <- period_stats %>%
+  pivot_wider(
+    id_cols = game_period,
+    names_from = d_level,
+    values_from = c(mean_return_pct, se_return_pct)
+  ) %>%
+  mutate(
+    diff_value = mean_return_pct_low_D - mean_return_pct_high_D
+  )
+
+# Define improved colors with better contrast
+high_d_color <- "#E64B35"  # red
+low_d_color <- "#4DBBD5"   # blue
+
+# Create connected scatter plot with enhanced annotations
+ggplot() +
+  # Add connecting lines between points
+  geom_line(data = period_stats, 
+            aes(x = game_period, y = mean_return_pct, 
+                color = d_level, group = d_level),
+            size = 1.5) +
+
+  # Add error bars
+  geom_errorbar(data = period_stats,
+                aes(x = game_period, 
+                    ymin = mean_return_pct - se_return_pct, 
+                    ymax = mean_return_pct + se_return_pct,
+                    color = d_level),
+                width = 0.25, size = 0.8) +
+  scale_color_manual(values = c("low_D" = low_d_color, "high_D" = high_d_color),
+                    labels = c("low_D" = "Low D-factor", "high_D" = "High D-factor")) +
+  scale_shape_manual(values = c("low_D" = 16, "high_D" = 17),
+                    labels = c("low_D" = "Low D-factor", "high_D" = "High D-factor")) +
+  # Set y-axis limits to make differences visible
+  scale_y_continuous(limits = c(0.41, 0.5), 
+                     breaks = seq(0.41, 0.49, 0.02)) +
   # Labels
-  labs(x = "Round Number", 
-       y = "Amount",
-       color = "Type",
-       fill = "Type",
-       title = "Average Investment and Return by D-factor type") +
+  labs(
+    x = NULL,
+    y = "Return Percentage (of 3x investment)",
+    color = "D-factor Level",
+    shape = "D-factor Level"
+  ) +
   # Theme
   theme_minimal() +
-  theme(legend.position = "bottom")
-```
-
-```{r}
-# Calculate means by D-factor group over all rounds
-means_all <- final_data %>%
-  group_by(d_level) %>%
-  summarise(
-    n = n(),
-    mean_return = mean(return),
-    sd_return = sd(return),
-    mean_inv = mean(investment),
-    sd_inv= sd(investment)
+  theme(
+    legend.position = "bottom",
+    panel.grid.major.y = element_line(color = "gray90"),
+    panel.grid.minor.y = element_blank(),
+    panel.grid.major.x = element_blank(),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text = element_text(size = 11),
+    plot.title = element_text(face = "bold", size = 14),
+    plot.subtitle = element_text(size = 11, face = "italic"),
+    legend.title = element_text(face = "bold", size = 11),
+    legend.text = element_text(size = 10)
   )
-
-print(means_all)
-
-# For absolute returns
-t.test(return ~ d_level, data = final_data)
-
-# For return percentages
-t.test(return_pct ~ d_level, data = final_data)
-
-# Mann-Whitney U tests (non-parametric alternative)
-# For absolute returns
-wilcox.test(return ~ d_level, data = final_data)
-
-# For return percentages
- wilcox.test(return_pct ~ d_level, data = final_data)
- 
-```
-
-```{r}
-library(ggplot2)
-library(dplyr)
-library(tidyr)
-
-# Create individual trajectory plot with mean overlay
-plot_individual_trajectories <- function(data, y_var, title) {
-  # Calculate mean trajectory
-  mean_trajectory <- data %>%
-    dplyr::group_by(roundNum) %>%
-    dplyr::summarize(
-      mean_val = mean(!!sym(y_var), na.rm = TRUE),
-      se = sd(!!sym(y_var), na.rm = TRUE) / sqrt(n())
-    )
-  
-  # Create base plot with individual trajectories
-  p <- ggplot() +
-    # Add individual trajectories with transparency
-    geom_line(data = data,
-              aes(x = roundNum, y = !!sym(y_var), group = playerId),
-              alpha = 0.1, color = "gray50") +
-    # Add mean trajectory with confidence band
-    geom_ribbon(data = mean_trajectory,
-               aes(x = roundNum, ymin = mean_val - se, ymax = mean_val + se),
-               alpha = 0.2, fill = "blue") +
-    geom_line(data = mean_trajectory,
-              aes(x = roundNum, y = mean_val),
-              color = "blue", size = 1) +
-    # Customize appearance
-    theme_minimal() +
-    labs(title = title,
-         x = "Round Number",
-         y = "Value") +
-    theme(legend.position = "bottom")
-  
-  return(p)
-}
-
-# Filter for first game only
-first_game_data <- final_data %>%
-  filter(gameNum.f == "first game")
-
-# Create plots
-p1 <- plot_individual_trajectories(first_game_data, 
-                                 "return_pct", 
-                                 "Individual Return Trajectories with Mean Overlay") +
-  scale_y_continuous(labels = scales::percent_format(),
-                    limits = c(0, 1)) +
-  ylab("Return Percentage")
-
-p2 <- plot_individual_trajectories(first_game_data, 
-                                 "investment", 
-                                 "Individual Investment Trajectories with Mean Overlay") +
-  scale_y_continuous(limits = c(0, 20)) +
-  ylab("Investment Amount")
-
-# Distribution plots
-p3 <- ggplot(first_game_data, aes(x = return_pct)) +
-  geom_density(fill = "blue", alpha = 0.3) +
-  facet_wrap(~roundNum, scales = "free_y", ncol = 5) +
-  theme_minimal() +
-  labs(title = "Distribution of Returns by Round",
-       x = "Return Percentage",
-       y = "Density") +
-  scale_x_continuous(labels = scales::percent_format())
-
-p4 <- ggplot(first_game_data, aes(x = investment)) +
-  geom_density(fill = "red", alpha = 0.3) +
-  facet_wrap(~roundNum, scales = "free_y", ncol = 5) +
-  theme_minimal() +
-  labs(title = "Distribution of Investments by Round",
-       x = "Investment Amount",
-       y = "Density")
-
-# Individual-level metrics
-player_summaries <- first_game_data %>%
-  dplyr::group_by(playerId, d_level) %>%
-  dplyr::summarize(
-    mean_return = mean(return_pct, na.rm = TRUE),
-    sd_return = sd(return_pct, na.rm = TRUE),
-    mean_investment = mean(investment, na.rm = TRUE),
-    sd_investment = sd(investment, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-# Strategy characteristics plot
-p5 <- ggplot(player_summaries, 
-             aes(x = mean_return, y = sd_return, color = d_level)) +
-  geom_point(alpha = 0.6) +
-  theme_minimal() +
-  labs(title = "Individual Strategy Characteristics",
-       x = "Mean Return Percentage",
-       y = "Return Standard Deviation",
-       color = "D-Factor Level") +
-  scale_x_continuous(labels = scales::percent_format()) +
-  scale_y_continuous(labels = scales::percent_format())
-
-# Print all plots (requires gridExtra)
-library(gridExtra)
-grid.arrange(p1, p2, p3, p4, ncol = 2)
-print(p5)
 ```
 
 
-```{r}
-# Count zero investments
-zero_counts <- final_data %>%
-  filter(investment == 0) %>%
-  group_by(opponent.f, d_level) %>%
-  summarise(
-    zero_count = n(),
-    n_players = n_distinct(playerId)
-  ) %>%
-  arrange(opponent.f, d_level)
 
-# Print results
-print("Number of zero investments by opponent type and D-factor:")
-print(zero_counts)
-```
 
-### Last round analysis 
+
+<!-- ### Last round analysis  -->
+
+
+
 ```{r}
 # Get last round returns
 last_round_data <- final_data %>%
@@ -613,7 +852,13 @@ wilcox.test(return ~ d_level, data = last_round_data)
 
 ```
 
-### proportion of states by round and opponent 
+### Last Round Analysis
+
+We conducted a separate analysis focusing solely on the final round of each game, where participants knew there would be no further interactions. This allows us to examine behavior in a context resembling a dictator game. We compared absolute returns and percentage returns between high_D and low_D groups. We used both Welch's t-tests and Wilcoxon rank-sum tests (also known as Mann-Whitney U tests). The Wilcoxon test is a non-parametric test that does not assume normality, making it a more robust choice if the data are not normally distributed, which is often the case with economic game data, especially in smaller samples or with outliers.
+
+In the last round, high_D participants sent back significantly lower absolute returns than low_D participants (`r sprintf("t(%1.2f) = %1.2f, p = %1.3f", t.test(return ~ d_level, data = last_round_data)$parameter, t.test(return ~ d_level, data = last_round_data)$statistic, t.test(return ~ d_level, data = last_round_data)$p.value)`); `r sprintf("Wilcoxon W = %1.0f, p = %1.3f", wilcox.test(return ~ d_level, data = last_round_data)$statistic, wilcox.test(return ~ d_level, data = last_round_data)$p.value)`). Similarly, high_D participants sent back a significantly lower percentage of the tripled investment (`r sprintf("t(%1.2f) = %1.2f, p = %1.3f", t.test(return_pct ~ d_level, data = last_round_data)$parameter, t.test(return_pct ~ d_level, data = last_round_data)$statistic, t.test(return_pct ~ d_level, data = last_round_data)$p.value)`); `r sprintf("Wilcoxon W = %1.0f, p = %1.3f", wilcox.test(return_pct ~ d_level, data = last_round_data)$statistic, wilcox.test(return_pct ~ d_level, data = last_round_data)$p.value)`). Both parametric (t-test) and non parametric tests (Wilcoxon) show significant differences.
+
+<!-- ### proportion of states by round and opponent  -->
 ```{r}
 # Calculate proportions of states for each round and opponent
 state_props <- final_data %>%
@@ -634,7 +879,8 @@ ggplot(state_props, aes(x = roundNum, y = proportion, fill = investorState.f)) +
   theme_minimal()
 ```
 
-## Payoff regression 
+### Total Payoff Analysis
+
 
 ```{r}
 # Reshape data to get one row per game per participant
@@ -650,29 +896,29 @@ payoff_data <- final_data  %>%
     dplyr::select(-payoffTrust1, -payoffTrust2)  # Remove unused columns
 
 
-# fit lmem
-mod_payoffs <- mixed( payoff ~ opponent.f*d_level*volatile_first + (1| playerId), payoff_data, REML= TRUE, method="KR")
-anova(mod_payoffs)
-summary(mod_payoffs)
+# Calculate total payoff per participant
+total_payoffs <- payoff_data %>%
+  group_by(playerId, d_level) %>%
+  summarise(total_payoff = sum(payoff, na.rm = TRUE))
 
+# T-test
+t_test_payoff <- t.test(total_payoff ~ d_level, data = total_payoffs)
+
+# Wilcoxon test
+wilcoxon_test_payoff <- wilcox.test(total_payoff ~ d_level, data = total_payoffs)
 ```
 
 
-```{r}
-# Get estimated marginal means
-# For opponent type
-opponent_emm <- emmeans(mod_payoffs, ~ opponent.f)
-pairs(opponent_emm)
 
-# For order (volatile_first)
-order_emm <- emmeans(mod_payoffs, ~ volatile_first)
-pairs(order_emm)
 
-# For d_type
-dtype_emm <- emmeans(mod_payoffs, ~ d_level)
-pairs(dtype_emm)
-```
-#### Payoff regression with sub-scales of D factor
+Finally, we analyzed the total payoffs earned by participants across both games, comparing high_D and low_D individuals. This analysis aimed to determine whether differences in strategy observed during the game (particularly in the later periods) translated into overall differences in earnings. We used a Welch's t-test and a Wilcoxon rank-sum test.
+
+The results showed no significant difference in total payoffs between high_D and low_D participants (`r sprintf("t(%1.2f) = %1.2f, p = %1.3f", t_test_payoff$parameter, t_test_payoff$statistic, t_test_payoff$p.value)`; `r sprintf("Wilcoxon W = %1.0f, p = %1.3f", wilcoxon_test_payoff$statistic, wilcoxon_test_payoff$p.value)`).
+
+Although high-D participants sent back lower returns in the late period of the trust game, their total accumulated payoff across all rounds was not significantly different from that of low-D participants.  This seemingly paradoxical result can be explained by the adaptive behavior of the HMM opponent.  While high-D individuals adopted a less cooperative strategy in later rounds, keeping a larger portion of the returns for themselves, the HMM responded by reducing its investments in these individuals.  Therefore, the higher proportion kept by high-D participants was offset by a reduction in the amount they received, leading to similar overall earnings compared to the more cooperative low-D participants.
+
+
+<!-- #### Payoff regression with sub-scales of D factor -->
 
 ```{r}
 mod_payoffs_cal <- mixed( payoff ~ opponent.f*cal_scaled*volatile_first + (1| playerId), payoff_data, REML= TRUE, method="KR")
@@ -721,133 +967,11 @@ emm_slopes <- emtrends(mod_payoffs_vin,
 pairs(emm_slopes)
 ```
 
-The effect of opponent type (volatile vs stable) becomes stronger as vindictiveness increases
-More vindictive players:
+## Round by round analysis 
 
-Tend to perform slightly better with the stable opponent
-Tend to perform worse with the volatile opponent
-Show a larger performance gap between opponent types
-
-This suggests that vindictive players are more sensitive to opponent behavior, particularly struggling with volatile opponents but potentially leveraging stable interactions to their advantage.
-
-
-### zero investment rounds model 
-
-```{r}
-# Count zero investments per player and condition
-zero_investments <- final_data %>%
-  group_by(playerId, d_level, opponent.f, volatile_first) %>%
-  summarise(
-    n_zero = sum(investment == 0),
-    total_rounds = n()
-  ) %>%
-  
-  ungroup()
-
-zero_mod <- mixed(n_zero ~ opponent.f*d_level + (1| playerId), zero_investments , REML=TRUE, method="KR" )
-summary(zero_mod)
-
-```
-
-### Analyse Round payoff using LMEM: 
-
-
-```{r}
-
-# Remove last round 
-data24 <- final_data %>% filter(isLastRound==FALSE)
-
-# Model comparisons, set REML = FASLE for now. 
-m0_p <- mixed( roundPayoff ~ opponent.f*inv_scaled*d_level*volatile_first + (1+ opponent.f| playerId), data24, control = lmerControl(optimizer = "bobyqa"))
-
-m1_p <- mixed( roundPayoff ~ opponent.f*inv_scaled*d_level*volatile_first + roundNum*d_level  + (1+ opponent.f| playerId), data24, control = lmerControl(optimizer = "bobyqa"))
-
-m2_p <- mixed( roundPayoff ~ opponent.f*inv_scaled*d_level*volatile_first*roundNum  + (1+ opponent.f| playerId), data24,  control = lmerControl(optimizer = "bobyqa"))
-
-
-# Likelihood ratio test + AIC/BIC COMPARISON 
-anova(m1_p$full_model, m0_p$full_model)
-anova(m1_p$full_model, m2_p$full_model)
-anova(m0_p$full_model, m2_p$full_model)
-
-```
-
-Second comparison (m1 vs m2):
-
-Chi-sq = 37.661, df = 14, p = 0.0005853 
-m2 is significantly better than m1
-Including roundNum in the full interaction further improves fit
-Lower AIC for m2 (52662 vs 52672)
-
-In simple terms:
-
-Adding round effects helps (m0 → m1)
-Letting round interact with everything helps even more (m1 → m2)
-m2 is the best model, suggesting that round effects are important and interacting with other variables
-Now let's run the m2 model with full specifications: 
-
-
-```{r}
-mod_roundPayoff <- mixed( roundPayoff ~ opponent.f*d_level*volatile_first*roundNum  + (1+ opponent.f| playerId), data24, REML=TRUE, method="KR") 
-
-anova(mod_roundPayoff)
-```
-```{r}
-library(MuMIn)
-
-# Calculate R-squared
-r2 <- r.squaredGLMM(mod_roundPayoff$full_model)
-
-# Print results
-print(r2)
-# The output shows:
-# R2m (marginal) - first column
-# R2c (conditional) - second column
-
-# To get a percentage, multiply by 100
-cat("Fixed effects explain", round(r2[1]*100, 1), "% of variance\n")
-cat("Fixed and random effects together explain", round(r2[2]*100, 1), "% of variance\n")
-
-# Optional: Calculate the variance explained by random effects alone
-cat("Random effects alone explain", round((r2[2] - r2[1])*100, 1), "% of variance\n")
-```
-
-
-
-
-
-## Analyse Percentage returns by round using LMEM: 
-
-
-```{r}
-# Model comparisons, set REML = FASLE for now. 
-
-
-m0 <- mixed( ret_pct_na ~ opponent.f*inv_scaled*d_level*volatile_first + (1+ opponent.f| playerId), data24, control = lmerControl(optimizer = "bobyqa"))
-
-m1 <- mixed( ret_pct_na ~ opponent.f*inv_scaled*d_level*volatile_first + roundNum*d_level  + (1+ opponent.f| playerId), data24, control = lmerControl(optimizer = "bobyqa"))
-
-m2 <- mixed( ret_pct_na ~ opponent.f*inv_scaled*d_level*volatile_first*roundNum  + (1+ opponent.f| playerId), data24,  control = lmerControl(optimizer = "bobyqa"))
-
-
-
-# Likelihood ratio test
-anova(m1$full_model, m0$full_model)
-anova(m1$full_model, m2$full_model)
-
-
-
-# m1 vs m0 : m1 better than m0 on AIC, BIC and loglikelihood ratio measures. So adding roundnumber seems to improve model fit .
-
-# m1 vs m2: There's evidence that m2 provides a better fit (significant chi-square test, lower AIC)
-# However, m2 is substantially more complex (14 more parameters)
-# The BIC suggests the simpler model (m1) might be sufficient.
-# m1 is more parsimonious, maybe we can use that.
-```
-
-```{r}
+```{r lmem, cache=T}
 # Maximal random effect structure
-mod_return_pct <- mixed(ret_pct_na ~ opponent.f*inv_scaled*d_level*volatile_first*roundNum + 
+mod_return_pct <- afex::mixed(ret_pct_na ~ opponent.f*inv_scaled*d_level*volatile_first*roundNum + 
       (1 + opponent.f + inv_scaled | playerId), 
       data = data24, 
       REML = TRUE, 
@@ -855,21 +979,80 @@ mod_return_pct <- mixed(ret_pct_na ~ opponent.f*inv_scaled*d_level*volatile_firs
 
 anova(mod_return_pct)
 
-
-
-# First, get estimated marginal means across a wider range of investment values
-emm <- emmeans(mod_return_pct, ~ opponent.f | d_level | inv_scaled, 
-               at = list(inv_scaled = seq(-2, 2, by = 0.5)))  # examine from -2 to +2 SD
-pairs(emm)
-
-# Look at investment slopes for each D-level and opponent combination
-emtrends(mod_return_pct, ~ d_level*opponent.f, var = "inv_scaled")
-
 ```
+
+
 ### Key Findings:
 
-#### Opponent * Investment * d_level  Interaction:  
 
+
+#### Main effects
+
+Our analysis revealed a significant main effect of investment amount (`r papaja::apa_print(mod_return_pct)$full_result$inv_scaled`), with participants returning higher percentages when they received larger investments, demonstrating positive reciprocity. We also found a significant main effect of round number (`r papaja::apa_print(mod_return_pct)$full_result$roundNum`), showing that return percentages generally decreased over time as the game progressed.
+
+
+#### D-Factor by Round Number interaction
+
+```{r}
+# Analyze slope differences by D-factor level
+d_level_trends <- emmeans::emtrends(mod_return_pct, ~ d_level, var = "roundNum")
+d_level_trends_test <- summary(d_level_trends)
+d_level_trends_contrast <- contrast(d_level_trends, "pairwise")
+
+d_level_trends 
+d_level_trends_test 
+d_level_trends_contrast 
+
+# Generate predicted data for plotting
+round_range <- 1:24
+c<- emmeans::emmip(
+  mod_return_pct,
+  d_level ~ roundNum,
+  at = list(roundNum = round_range),
+  type = "response",
+  CIs = TRUE,
+  plotit = FALSE
+)
+
+```
+
+```{r}
+# Generate predictions across a range of roundNum values, say from 1 to 24
+#   (the length of your experiment). You can vary this sequence as needed.
+round_range <- 1:24
+
+# We use emmip to predict how ret_pct_na changes over roundNum by d_level
+plot_data <- emmip(
+  mod_return_pct,
+  d_level ~ roundNum,
+  at = list(roundNum = round_range),
+  type = "response",   # 'response' will back-transform if link functions are involved
+  CIs = TRUE,
+  plotit = FALSE
+)
+
+# Inspect the data frame of predicted values
+head(plot_data)
+
+# Now, plot using ggplot2
+ggplot(plot_data, aes(x = roundNum, y = yvar, color = d_level, group = d_level)) +
+  geom_line(size = 1.2) +
+  geom_ribbon(aes(ymin = LCL, ymax = UCL, fill = d_level),
+              alpha = 0.2, color = NA) +
+  labs(
+    x = "Round Number",
+    y = "Predicted Return Proportion",
+    color = "D-level",
+    fill = "D-level",
+    title = "Effect of Round Number by D-level on Return Proportion"
+  ) +
+  theme_minimal(base_size = 14)
+
+```
+We found a significant interaction between D-factor and round number (`r papaja::apa_print(mod_return_pct)$full_result$d_level_roundNum`). Participants with high D-factor scores demonstrated a significant negative slope in their return proportions as the game progressed, indicating a systematic decrease in reciprocity over time (slope = `r sprintf("%.4f", d_level_trends_test$roundNum.trend[1])`, 95% CI [`r sprintf("%.4f", d_level_trends_test$asymp.LCL[1])`, `r sprintf("%.4f", d_level_trends_test$asymp.UCL[1])`]). In contrast, participants with low D-factor scores maintained relatively stable return rates across rounds, with a slope not significantly different from zero. The difference between these slopes was statistically significant (`r sprintf("z = %.2f, p = %.3f", summary(d_level_trends_contrast)$z.ratio, summary(d_level_trends_contrast)$p.value)`).
+
+
+#### Opponent Type, Investment, and D-factor Interaction
 
 ```{r}
 # Get the investment slopes for each combination
@@ -916,13 +1099,50 @@ ggplot(predicted_data, aes(x = inv_scaled, y = return_rate,
   theme_minimal() +
   theme(legend.position = "bottom")
 ```
-Low D individuals show significant reciprocity (positive slopes) with both opponents. Low D individuals show stronger reciprocity with the volatile opponent
 
-High D individuals show no significant reciprocity with either opponent type
+```{r emtrends_calcs, include=FALSE}
+library(emmeans)
+# Get the slopes (effects of investment) for each combination
+slopes <- emtrends(mod_return_pct, ~ opponent.f * d_level, var = "inv_scaled")
+slopes_summary <- summary(slopes, infer = TRUE)
+slopes_summary 
 
-The largest difference in reciprocity is between high and low D individuals when facing the volatile opponent
+# # Define the contrasts
+# contrasts <- list(
+#   "Investment effect: High vs Low D in Human-like HMM" = c(-1, 1, 0, 0),
+#   "Investment effect: High vs Low D in Volatile HMM" = c(0, 0, -1, 1),
+#   "Opponent effect: Human vs Volatile in Low D" = c(-1, 0, 1, 0),
+#   "Opponent effect: Human vs Volatile in High D" = c(0, -1, 0, 1)
+# )
+# 
+# # Test the contrasts with multiple comparison correction
+# results_3w <- contrast(slopes, method = contrasts, adjust = "sidak")
+# results_3w
+```
 
-This suggests that Low D individuals are more responsive to the level of investment they receive, especially in volatile interactions, while High D individuals maintain more stable return rates regardless of investment received. This could indicate that High D individuals are less influenced by their partner's behavior, while Low D individuals adjust their behavior more in response to their partner's actions.
+
+
+<!-- Participants with low D-factor scores showed significant positive reciprocity with both opponent types, as indicated by positive slopes with confidence intervals that do not include zero. For these participants, a one-unit increase in investment was associated with an increase in return percentage of approximately $2.0%$  when facing the human-like HMM opponent and $3.1%$ when facing the volatile HMM opponent. In contrast, participants with high D-factor scores did not show significant reciprocity with either opponent type, as their confidence intervals include zero. This suggests that high D-factor participants' return decisions were less influenced by the magnitude of investment they received. -->
+
+
+
+<!-- Analysis of the interaction between opponent type, investment, and D-factor revealed differing reciprocity patterns. We used `emtrends` to calculate simple slopes of return percentage on investment for each opponent type and D-factor group. -->
+
+Low D-factor participants showed significant positive reciprocity with both opponents: a one-unit increase in investment led to a significant increase in return percentage for both the human-like HMM (`r sprintf("%.1f%%", 100*slopes_summary$inv_scaled.trend[3])``r ifelse(slopes_summary$p.value[3] < 0.001, "***", ifelse(slopes_summary$p.value[3] < 0.01, "**", ifelse(slopes_summary$p.value[3] < 0.05, "*", "")))`, *p* = `r sprintf("%.3f", slopes_summary$p.value[3])`) and the volatile HMM (`r sprintf("%.1f%%", 100*slopes_summary$inv_scaled.trend[4])``r ifelse(slopes_summary$p.value[4] < 0.001, "***", ifelse(slopes_summary$p.value[4] < 0.01, "**", ifelse(slopes_summary$p.value[4] < 0.05, "*", "")))`, *p* = `r sprintf("%.3f", slopes_summary$p.value[4])`).
+
+In contrast, high D-factor participants did *not* show significant reciprocity with either the human-like HMM (slope = `r sprintf("%.3f", slopes_summary$inv_scaled.trend[1])`, *p* = `r sprintf("%.3f", slopes_summary$p.value[1])`) or the volatile HMM (slope = `r sprintf("%.3f", slopes_summary$inv_scaled.trend[2])`, *p* = `r sprintf("%.3f", slopes_summary$p.value[2])`), indicating their returns were less influenced by investment amount.
+
+
+
+
+
+<!-- Low D individuals show significant reciprocity (positive slopes) with both opponents. Low D individuals show stronger reciprocity with the volatile opponent -->
+
+<!-- High D individuals show no significant reciprocity with either opponent type -->
+
+<!-- The largest difference in reciprocity is between high and low D individuals when facing the volatile opponent -->
+
+<!-- This suggests that Low D individuals are more responsive to the level of investment they receive, especially in volatile interactions, while High D individuals maintain more stable return rates regardless of investment received. This could indicate that High D individuals are less influenced by their partner's behavior, while Low D individuals adjust their behavior more in response to their partner's actions. -->
 
 
 ```{r}
@@ -950,6 +1170,7 @@ plot_data <- emmip(
 head(plot_data)
 
 ```
+
 ```{r}
 ggplot(plot_data, aes(x = inv_scaled, y = yvar,
                       color = opponent.f, group = opponent.f)) +
@@ -972,6 +1193,7 @@ ggplot(plot_data, aes(x = inv_scaled, y = yvar,
   theme_minimal(base_size = 14)
 
 ```
+
 ```{r}
 # Obtain the slopes for inv_scaled for each combination of opponent.f and d_level
 inv_slopes <- emtrends(
@@ -990,54 +1212,9 @@ inv_slopes$contrasts
 ```
 
 
-#### d-level by round-number Interaction
-
-```{r}
-# For time-related effects
-emtrends(mod_return_pct, ~ d_level, var = "roundNum")
-```
-```{r}
-# Generate predictions across a range of roundNum values, say from 1 to 24
-#   (the length of your experiment). You can vary this sequence as needed.
-round_range <- 1:24
-
-# We use emmip to predict how ret_pct_na changes over roundNum by d_level
-plot_data <- emmip(
-  mod_return_pct,
-  d_level ~ roundNum,
-  at = list(roundNum = round_range),
-  type = "response",   # 'response' will back-transform if link functions are involved
-  CIs = TRUE,
-  plotit = FALSE
-)
-
-# Inspect the data frame of predicted values
-head(plot_data)
-
-# Now, plot using ggplot2
-ggplot(plot_data, aes(x = roundNum, y = yvar, color = d_level, group = d_level)) +
-  geom_line(size = 1.2) +
-  geom_ribbon(aes(ymin = LCL, ymax = UCL, fill = d_level),
-              alpha = 0.2, color = NA) +
-  labs(
-    x = "Round Number",
-    y = "Predicted Return Proportion",
-    color = "D-level",
-    fill = "D-level",
-    title = "Effect of Round Number by D-level on Return Proportion"
-  ) +
-  theme_minimal(base_size = 14)
-
-```
-
-This interaction suggests that high D individuals show increasingly less reciprocity over time, while low D individuals maintain relatively stable levels of reciprocity  throughout the game. The declining pattern for high D individuals might reflect:
-
-Increasing strategic behavior over time
-Decreasing willingness to reciprocate as the game progresses
-Possible learning effects that lead to more self-interested behavior
+#### Four-Way Interaction: Opponent, Investment, D-factor, and Round Number
 
 
-#### opponent.f:inv_scaled:d_level:roundNum  interaction  
 
 ```{r}
 # Look at investment slopes at different time points
@@ -1046,6 +1223,7 @@ emtrends(mod_return_pct,
          var = "inv_scaled",
          at = list(roundNum = seq(1, 20, by = 5)))  # Examine trend across multiple rounds
 ```
+
 ```{r}
 # Look at round slopes at different investment levels
 # Get slopes at different investment levels
@@ -1054,12 +1232,24 @@ emtrends(mod_return_pct,
          var = "roundNum",
          at = list(inv_scaled = c(-1, 0, 1)))
 ```
+
 ```{r}
 # Test whether slopes differ between investment levels
-emtrends(mod_return_pct, 
+emtrends_round <- emtrends(mod_return_pct, 
          pairwise ~ inv_scaled | d_level*opponent.f, 
          var = "roundNum",
          at = list(inv_scaled = c(-1, 0, 1)))
+
+emtrends_round 
+
+relevant_contrast <- summary(emtrends_round$contrasts, infer = TRUE)[1,]
+relevant_contrast
+
+# Get the slopes and CIs for high-D, human-like, high and low investment
+high_d_human_slopes <- summary(emtrends_round$emtrends, infer = TRUE)
+high_d_human_high_inv <- high_d_human_slopes[3,] #high inv
+high_d_human_low_inv <- high_d_human_slopes[1,] #low inv
+
 ```
 
 
@@ -1085,6 +1275,10 @@ trend_data <- as.data.frame(trends) %>%
   ) %>%
   rename(slope = roundNum.trend)
 
+
+```
+
+```{r, include=T}
 # Create plot
 ggplot(trend_data, aes(x = inv_level, y = slope, fill = opponent)) +
   geom_bar(stat = "identity", position = position_dodge(), alpha = 0.7) +
@@ -1102,76 +1296,19 @@ ggplot(trend_data, aes(x = inv_level, y = slope, fill = opponent)) +
   theme(legend.position = "bottom",
         axis.text.x = element_text(angle = 45, hjust = 1))
 ```
-Only high D participants with stable opponent (AI_HMM) show significant differences between investment levels (p = 0.0415)
 
-Their negative slope gets steeper with higher investments
-From -0.000128 (low inv) to -0.00140 (medium) to -0.00267 (high inv)
+Analysis of the significant four-way interaction (`r papaja::apa_print(mod_return_pct)$full_result$opponent_f_inv_scaled_d_level_roundNum`) revealed that only high D-factor participants facing the human-like opponent showed investment-dependent changes in behavior across rounds (`r sprintf("p = %.3f", relevant_contrast$p.value)`). For these participants, returns decreased significantly across rounds with high investments (slope = `r sprintf("%.5f", high_d_human_high_inv$roundNum.trend)`, 95% CI [`r sprintf("%.5f", high_d_human_high_inv$asymp.LCL)`, `r sprintf("%.5f", high_d_human_high_inv$asymp.UCL)`]), but remained stable with low investments (slope = `r sprintf("%.5f", high_d_human_low_inv$roundNum.trend)`, 95% CI [`r sprintf("%.5f", high_d_human_low_inv$asymp.LCL)`, `r sprintf("%.5f", high_d_human_low_inv$asymp.UCL)`]), a significant difference in slopes (`r sprintf("p = %.3f", relevant_contrast$p.value)`).
 
-For other combinations:
+Neither low D-factor participants nor high D-factor participants facing the volatile opponent showed this strategic pattern. This suggests high D-factor participants specifically exploit predictable opponents by systematically reducing reciprocity over time on high-investment trials.
 
-Low D with stable opponent: Very similar slopes across investments (p = 0.9868)
-High D with volatile opponent: Some variation but not significant (p = 0.5478)
-Low D with volatile opponent: Some variation but not significant (p = 0.4263)
+<!-- #### Investment by order by d_level by rounNumber  interaction -->
 
 
+<!-- The significant four-way interaction between investment, order, D-factor, and round number (`r papaja::apa_print(mod_return_pct)$full_result$inv_scaled_d_level_volatile_first_roundNum`) revealed that investment level moderated how participants' return behavior changed over rounds, with patterns differing by D-factor and order condition. -->
 
+<!-- High D-factor participants who faced the stable opponent first showed a strategic pattern: they significantly decreased returns over rounds for high investments ($p < .0001$) and medium investments ($p = .0001$), but not for low investments ($p = .84$). This suggests calculated exploitation specifically targeting more exploitable partners. In contrast, high D-factor participants who faced the volatile opponent first showed the opposite pattern: significant decreases for low investments ($p = .007$) and medium investments ($p = .007$), but not for high investments ($p = .63$). -->
 
-
-#### Investment by order by d_level by rounNumber  interaction
-
-```{r}
-# # Get round slopes for different combinations
-# trends <- emtrends(mod_return_pct, 
-#                   ~ d_level*volatile_first*inv_scaled, 
-#                   var = "roundNum",
-#                   at = list(inv_scaled = c(-1, 0, 1)))
-# 
-# # Convert to data frame and organize for plotting
-# trend_data <- as.data.frame(trends) %>%
-#   mutate(
-#     d_level = factor(d_level),
-#     volatile_first = factor(volatile_first, labels = c("Stable First", "Volatile First")),
-#     inv_level = factor(case_when(
-#       inv_scaled == -1 ~ "Low (-1 SD)",
-#       inv_scaled == 0 ~ "Medium (0)",
-#       inv_scaled == 1 ~ "High (+1 SD)"
-#     ), levels = c("Low (-1 SD)", "Medium (0)", "High (+1 SD)")),
-#     lower = roundNum.trend - (1.96 * SE),
-#     upper = roundNum.trend + (1.96 * SE)
-#   )
-# 
-# # Create plot
-# ggplot(trend_data, aes(x = inv_level, y = roundNum.trend, fill = volatile_first)) +
-#   geom_bar(stat = "identity", position = position_dodge(), alpha = 0.7) +
-#   geom_errorbar(aes(ymin = lower, ymax = upper), 
-#                 position = position_dodge(width = 0.9),
-#                 width = 0.2) +
-#   facet_wrap(~d_level) +
-#   scale_fill_manual(values = c("darkgreen", "orange")) +
-#   labs(x = "Investment Level",
-#        y = "Change in Return Rate per Round",
-#        fill = "Order Condition",
-#        title = "Learning Trends by Investment Level and Order") +
-#   theme_minimal() +
-#   geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
-#   theme(legend.position = "bottom",
-#         axis.text.x = element_text(angle = 45, hjust = 1))
-# 
-# # Test differences between slopes
-# pairs(trends, by = c("d_level", "volatile_first"))
-```
-Order effects are crucial - starting with stable vs volatile opponent changes how investment levels affect learning
-D-level moderates these effects:
-
-High D participants show investment-dependent learning only when starting stable
-Low D participants show investment-dependent learning only when starting volatile
-
-
-The effects are mirror images:
-
-High D (stable first): more negative slopes with higher investment
-Low D (volatile first): more positive slopes with lower investment
-
+<!-- Low D-factor participants displayed fundamentally different behavior:  they showed no significant changes in returns across investments.  -->
 
 ```{r}
 # Get slopes across finer gradient of investment values
@@ -1189,6 +1326,10 @@ trend_data <- as.data.frame(trends_continuous) %>%
     upper = roundNum.trend + (1.96 * SE)
   )
 
+
+```
+
+```{r, include=T}
 # Create plot
 ggplot(trend_data, aes(x = inv_scaled, y = roundNum.trend, color = volatile_first)) +
   geom_line(size = 1) +
@@ -1207,40 +1348,97 @@ ggplot(trend_data, aes(x = inv_scaled, y = roundNum.trend, color = volatile_firs
 ```
 
 
-```{r}
-# 1) Obtain the slopes for roundNum at each combination of 
-#    d_level * volatile_first, for a few key 'inv_scaled' values:
-trends_key_slices <- emtrends(
+
+
+#### Four-Way Interaction: Investment, Order, D-factor, and Round Number
+
+The significant four-way interaction involving investment amount, order of opponent presentation (volatile first or stable/human-like first), D-factor, and round number (`r papaja::apa_print(mod_return_pct)$full_result$inv_scaled_d_level_volatile_first_roundNum`) reveals a complex interplay of factors influencing return behavior. The key finding is that the *order* in which participants faced the opponents, combined with their D-factor level, influenced how their returns changed over time *depending on the investment level*.
+
+To disentangle this interaction, we used `emtrends` to examine the simple slopes of return percentage over rounds, for each combination of D-factor, order condition, and investment level. We then used `test()` to determine if these slopes were significantly different from zero.
+
+```{r four_way_inv_order_calcs, include=FALSE}
+library(emmeans)
+
+# Slopes of return percentage over rounds for each investment level,
+#  D-factor, and order condition.
+round_slopes <- emtrends(
   mod_return_pct,
-  pairwise ~ d_level * volatile_first,  # Compare across the 2x2 combos
+  ~ inv_scaled | d_level * volatile_first,
   var = "roundNum",
-  # We'll pick 3 slices of investment for simpler comparisons
-  at = list(inv_scaled = c(-1, 0, 1)),  
-  adjust = "tukey"                       # multiple-comparison correction
+  at = list(inv_scaled = c(-1, 0, 1))
 )
 
-# 2) The returned object has two components: $emtrends and $contrasts.
-#    - $emtrends: estimated slopes for each factor combination & each inv_scaled
-#    - $contrasts: pairwise differences in those slopes
+# Test if slopes differ from zero, with Sidak correction for multiple comparisons.
+round_slopes_test <- test(round_slopes, null = 0, adjust = "sidak")
 
-# View the slopes (roundNum trend) at each slice:
-trends_key_slices$emtrends
+get_slope_and_p <- function(test_object, d_level_val, volatile_first_val, inv_scaled_val) {
+  # Convert to data frame for easier manipulation
+  df <- as.data.frame(test_object)
+  
+  # Filter for the specific combination
+  result_row <- df[df$d_level == d_level_val & 
+                  df$volatile_first == volatile_first_val & 
+                  df$inv_scaled == inv_scaled_val, ]
+  
+  # Check if we found a matching row
+  if(nrow(result_row) == 0) {
+    warning("No matching combination found")
+    return(list(slope = NA, p_value = NA))
+  }
+  
+  # Return both the slope and p-value
+  return(list(
+    slope = result_row$roundNum.trend,
+    p_value = result_row$p.value
+  ))
+}
 
-# Test if each slope is significantly different from 0:
-test(trends_key_slices$emtrends, null = 0, adjust = "sidak")
+# Get values for high-D, stable-first
+high_D_stable_high <- get_slope_and_p(round_slopes_test, "high_D", FALSE, 1)
 
-# View pairwise contrasts of slopes (e.g., High d_level vs Low d_level):
-trends_key_slices$contrasts
+high_D_stable_high <- get_slope_and_p(round_slopes_test, "high_D", FALSE, 1)
+high_D_stable_med <- get_slope_and_p(round_slopes_test, "high_D", FALSE, 0)
+high_D_stable_low <- get_slope_and_p(round_slopes_test, "high_D", FALSE, -1)
+
+# Get values for high-D, volatile-first
+high_D_volatile_high <- get_slope_and_p(round_slopes_test, "high_D", TRUE, 1)
+high_D_volatile_med <- get_slope_and_p(round_slopes_test, "high_D", TRUE, 0)
+high_D_volatile_low <- get_slope_and_p(round_slopes_test, "high_D", TRUE, -1)
+
+# Get values for low-D, stable-first
+low_D_stable_high <- get_slope_and_p(round_slopes_test, "low_D", FALSE, 1)
+low_D_stable_med <- get_slope_and_p(round_slopes_test, "low_D", FALSE, 0)
+low_D_stable_low <- get_slope_and_p(round_slopes_test, "low_D", FALSE, -1)
+
+# Get values for low-D, volatile-first
+low_D_volatile_high <- get_slope_and_p(round_slopes_test, "low_D", TRUE, 1)
+low_D_volatile_med <- get_slope_and_p(round_slopes_test, "low_D", TRUE, 0)
+low_D_volatile_low <- get_slope_and_p(round_slopes_test, "low_D", TRUE, -1)
+
+# Helper function for formatting p-values
+format_p <- function(p) {
+  if (is.na(p)) {
+    return("NA")
+  } else if (p < 0.001) {
+    return("p < .001")
+  } else {
+    return(sprintf("p = %.3f", p))
+  }
+}
 
 ```
 
+<!-- High-D participants who faced the *stable (human-like)* opponent *first* showed a strategic pattern: they significantly decreased their returns over rounds for *high* (slope = `r sprintf("%.5f", high_D_stable_high$slope)`, *p* = `r sprintf("%.3f", high_D_stable_high$p_value)`) and *medium* investments (slope = `r sprintf("%.5f", high_D_stable_med$slope)`, *p* = `r sprintf("%.3f", high_D_stable_med$p_value)`), but not for low investments (slope = `r sprintf("%.5f", high_D_stable_low$slope)`, *p* = `r sprintf("%.3f", high_D_stable_low$p_value)`). This reinforces the idea that high-D individuals are more likely to reduce cooperation when they perceive an opportunity for greater gain (higher investments) and a predictable partner. In contrast, high-D participants who faced the *volatile* opponent *first* showed the *opposite* pattern: decreasing returns for *low* (slope = `r sprintf("%.5f", high_D_volatile_low$slope)`, *p* = `r sprintf("%.3f", high_D_volatile_low$p_value)`) and *medium* investments (slope = `r sprintf("%.5f", high_D_volatile_med$slope)`, *p* = `r sprintf("%.3f", high_D_volatile_med$p_value)`), but not for high investments (slope = `r sprintf("%.5f", high_D_volatile_high$slope)`, *p* = `r sprintf("%.3f", high_D_volatile_high$p_value)`) -->
 
-High-D = Negative slope in both conditions.
-Low-D = Negative slope in stable-first, no slope in volatile-first.
 
-Statistically significant differences between High-D and Low-D specifically in the volatile-first condition, consistent with High-D participants consistently “pulling back” returns while Low-D remain steady in that environment.
+High-D participants who faced the *stable* (human-like) *opponent* *first* showed a strategic pattern: they significantly decreased their returns over rounds for *high* (slope = `r sprintf("%.5f", high_D_stable_high$slope)`, `r format_p(high_D_stable_high$p_value)`) and *medium* investments (slope = `r sprintf("%.5f", high_D_stable_med$slope)`, `r format_p(high_D_stable_med$p_value)`), but not for low investments (slope = `r sprintf("%.5f", high_D_stable_low$slope)`, `r format_p(high_D_stable_low$p_value)`). This reinforces the idea that high-D individuals are more likely to reduce cooperation when they perceive an opportunity for greater gain (higher investments) and a predictable partner. In contrast, high-D participants who faced the *volatile* *opponent* *first* showed the *opposite* pattern: decreasing returns for *low* (slope = `r sprintf("%.5f", high_D_volatile_low$slope)`, `r format_p(high_D_volatile_low$p_value)`) and *medium* investments (slope = `r sprintf("%.5f", high_D_volatile_med$slope)`, `r format_p(high_D_volatile_med$p_value)`), but not for high investments (slope = `r sprintf("%.5f", high_D_volatile_high$slope)`, `r format_p(high_D_volatile_high$p_value)`).
 
-All of this supports the notion that higher levels of the Dark Factor are associated with more consistent declines in trust or reciprocity over repeated rounds, whereas lower Dark Factor individuals are more variable and sometimes maintain stable behavior (particularly in volatile-first)
+Low-D participants, regardless of the order in which they faced the opponents, did *not* show significant changes in their returns across rounds for any investment level.
+
+<!-- *Stable First*: low investments (slope = `r sprintf("%.5f", low_D_stable_low$slope)`, `r format_p(low_D_stable_low$p_value)`), medium investments (slope = `r sprintf("%.5f", low_D_stable_med$slope)`, `r format_p(low_D_stable_med$p_value)`), high investments (slope = `r sprintf("%.5f", low_D_stable_high$slope)`, `r format_p(low_D_stable_high$p_value)`). *Volatile First*: low investments (slope = `r sprintf("%.5f", low_D_volatile_low$slope)`, `r format_p(low_D_volatile_low$p_value)`), medium investments (slope = `r sprintf("%.5f", low_D_volatile_med$slope)`, `r format_p(low_D_volatile_med$p_value)`), high investments (slope = `r sprintf("%.5f", low_D_volatile_high$slope)`, `r format_p(low_D_volatile_high$p_value)`). -->
+
+
+<!-- All of this supports the notion that higher levels of the Dark Factor are associated with more consistent declines in trust or reciprocity over repeated rounds, whereas lower Dark Factor individuals are more variable and sometimes maintain stable behavior (particularly in volatile-first) -->
 
 
 ```{r}
@@ -1259,66 +1457,66 @@ cat("Random effects alone explain", round((r2_pct[2] - r2_pct[1])*100, 1), "% of
 
 
 
-## Absolute return model
+<!-- ## Absolute return model -->
 
 
 
-```{r}
-mod_return <- mixed( return ~ opponent.f*inv_scaled*d_level*volatile_first + (1 | playerId), final_data, REML= TRUE, method="KR")
+<!-- ```{r} -->
+<!-- mod_return <- mixed( return ~ opponent.f*inv_scaled*d_level*volatile_first + (1 | playerId), final_data, REML= TRUE, method="KR") -->
 
-summary(mod_return)
-```
+<!-- summary(mod_return) -->
+<!-- ``` -->
 
-```{r}
-library(emmeans)
-library(ggplot2)
-library(dplyr)
+<!-- ```{r} -->
+<!-- library(emmeans) -->
+<!-- library(ggplot2) -->
+<!-- library(dplyr) -->
 
-# For opponent effect
-opponent_emm <- emmeans(mod_return, ~ opponent.f)
-opponent_pairs <- pairs(opponent_emm)
-print(opponent_pairs)
+<!-- # For opponent effect -->
+<!-- opponent_emm <- emmeans(mod_return, ~ opponent.f) -->
+<!-- opponent_pairs <- pairs(opponent_emm) -->
+<!-- print(opponent_pairs) -->
 
-# For investment × d_level interaction
-# First get the slopes for each d_level
-slopes <- emtrends(mod_return, ~d_level, var="inv_scaled")
-print(slopes)
+<!-- # For investment × d_level interaction -->
+<!-- # First get the slopes for each d_level -->
+<!-- slopes <- emtrends(mod_return, ~d_level, var="inv_scaled") -->
+<!-- print(slopes) -->
 
-# Compare slopes between d_levels
-slope_pairs <- pairs(slopes)
-print(slope_pairs)
+<!-- # Compare slopes between d_levels -->
+<!-- slope_pairs <- pairs(slopes) -->
+<!-- print(slope_pairs) -->
 
-# Get predicted margins at specific investment values
-inv_grid <- seq(from = -2, to = 2, by = 0.5)  # Using standardized values
-inv_d_emm <- emmeans(mod_return, 
-                    ~ d_level | inv_scaled, 
-                    at = list(inv_scaled = inv_grid))
+<!-- # Get predicted margins at specific investment values -->
+<!-- inv_grid <- seq(from = -2, to = 2, by = 0.5)  # Using standardized values -->
+<!-- inv_d_emm <- emmeans(mod_return,  -->
+<!--                     ~ d_level | inv_scaled,  -->
+<!--                     at = list(inv_scaled = inv_grid)) -->
 
-# Convert to data frame for plotting
-inv_d_df <- as.data.frame(inv_d_emm)
+<!-- # Convert to data frame for plotting -->
+<!-- inv_d_df <- as.data.frame(inv_d_emm) -->
 
-# Plot the interaction
-ggplot(inv_d_df, aes(x = inv_scaled, y = emmean, color = d_level)) +
-  geom_line(size = 1) +
-  geom_ribbon(aes(ymin = emmean - SE, 
-                  ymax = emmean + SE,
-                  fill = d_level), 
-              alpha = 0.2) +
-  scale_color_manual(values = c("high_D" = "red", "low_D" = "blue")) +
-  scale_fill_manual(values = c("high_D" = "red", "low_D" = "blue")) +
-  labs(x = "Scaled Investment",
-       y = "Estimated Marginal Mean Return",
-       title = "Investment × D-factor Interaction Effect",
-       subtitle = "Shaded areas represent ±1 SE",
-       color = "D-factor Level",
-       fill = "D-factor Level") +
-  theme_minimal()
+<!-- # Plot the interaction -->
+<!-- ggplot(inv_d_df, aes(x = inv_scaled, y = emmean, color = d_level)) + -->
+<!--   geom_line(size = 1) + -->
+<!--   geom_ribbon(aes(ymin = emmean - SE,  -->
+<!--                   ymax = emmean + SE, -->
+<!--                   fill = d_level),  -->
+<!--               alpha = 0.2) + -->
+<!--   scale_color_manual(values = c("high_D" = "red", "low_D" = "blue")) + -->
+<!--   scale_fill_manual(values = c("high_D" = "red", "low_D" = "blue")) + -->
+<!--   labs(x = "Scaled Investment", -->
+<!--        y = "Estimated Marginal Mean Return", -->
+<!--        title = "Investment × D-factor Interaction Effect", -->
+<!--        subtitle = "Shaded areas represent ±1 SE", -->
+<!--        color = "D-factor Level", -->
+<!--        fill = "D-factor Level") + -->
+<!--   theme_minimal() -->
 
-```
+<!-- ``` -->
 
 
 
-## Pct return model whith latent inv state 
+<!-- ## Pct return model whith latent inv state  -->
 
 ```{r}
 # Model comparison 
@@ -1335,7 +1533,7 @@ m2_lat <- mixed( ret_pct_na ~ opponent.f*investorState.f*d_level*volatile_first*
 
 
 # Likelihood ratio test
-anova(m1_lat$full_model, m0$full_model)
+anova(m1_lat$full_model, m0_lat$full_model)
 anova(m1_lat$full_model, m2_lat$full_model)
 anova(m0_lat$full_model, m2_lat$full_model)
 
@@ -1361,7 +1559,7 @@ r2_lat <- r.squaredGLMM(mod_returns_latent$full_model)
 print(r2_lat)
 ```
 
-### Two way interaction investor State and D_level
+<!-- ### Two way interaction investor State and D_level -->
 
 ```{r}
 # First get emmeans object for the interaction
@@ -1439,7 +1637,7 @@ Direct comparisons between D-factor groups revealed that low D-factor participan
 
 
 
-### Three way interaction D_level, Investor State and Opponent: 
+<!-- ### Three way interaction D_level, Investor State and Opponent:  -->
 
 
 
@@ -1535,10 +1733,10 @@ ggplot(contrast_df, aes(x = contrast, y = estimate, color = d_level)) +
   theme(legend.position = "top",
         axis.text.x = element_text(angle = 45, hjust = 1))
 ```
-across investor states, with differences between opponent types. With the human-like HMM opponent, high D-factor participants showed higher returns in happy versus neutral states (b = 0.030, SE = 0.008, z = 3.62, p < .001) and happy versus unhappy states (b = 0.025, SE = 0.012, z = 2.09, p = .036). Low D-factor participants showed higher returns across all state comparisons: neutral versus unhappy (b = 0.028, SE = 0.011, z = 2.42, p = .015), happy versus unhappy (b = 0.047, SE = 0.012, z = 3.76, p < .001), and happy versus neutral (b = 0.019, SE = 0.008, z = 2.22, p = .026).
+<!-- across investor states, with differences between opponent types. With the human-like HMM opponent, high D-factor participants showed higher returns in happy versus neutral states (b = 0.030, SE = 0.008, z = 3.62, p < .001) and happy versus unhappy states (b = 0.025, SE = 0.012, z = 2.09, p = .036). Low D-factor participants showed higher returns across all state comparisons: neutral versus unhappy (b = 0.028, SE = 0.011, z = 2.42, p = .015), happy versus unhappy (b = 0.047, SE = 0.012, z = 3.76, p < .001), and happy versus neutral (b = 0.019, SE = 0.008, z = 2.22, p = .026). -->
 
-With the volatile HMM opponent, the pattern diverged markedly. High D-factor participants showed no significant differences in returns between any investor states (all ps > .58). In contrast, low D-factor participants maintained significant differences, with higher returns in neutral versus unhappy states (b = 0.038, SE = 0.009, z = 4.12, p < .001), happy versus unhappy states (b = 0.068, SE = 0.010, z = 6.81, p < .001), and happy versus neutral states (b = 0.030, SE = 0.009, z = 3.22, p = .001).
-The differences between D-factor groups were most pronounced with the volatile opponent, where low D-factor participants showed consistently larger differences in returns between states compared to high D-factor participants (neutral vs unhappy: b = 0.033, SE = 0.013, z = 2.55, p = .011; happy vs unhappy: b = 0.068, SE = 0.015, z = 4.65, p < .001; happy vs neutral: b = 0.035, SE = 0.014, z = 2.57, p = .010).
+<!-- With the volatile HMM opponent, the pattern diverged markedly. High D-factor participants showed no significant differences in returns between any investor states (all ps > .58). In contrast, low D-factor participants maintained significant differences, with higher returns in neutral versus unhappy states (b = 0.038, SE = 0.009, z = 4.12, p < .001), happy versus unhappy states (b = 0.068, SE = 0.010, z = 6.81, p < .001), and happy versus neutral states (b = 0.030, SE = 0.009, z = 3.22, p = .001). -->
+<!-- The differences between D-factor groups were most pronounced with the volatile opponent, where low D-factor participants showed consistently larger differences in returns between states compared to high D-factor participants (neutral vs unhappy: b = 0.033, SE = 0.013, z = 2.55, p = .011; happy vs unhappy: b = 0.068, SE = 0.015, z = 4.65, p < .001; happy vs neutral: b = 0.035, SE = 0.014, z = 2.57, p = .010). -->
 
 
 ```{r}
@@ -1627,9 +1825,9 @@ print(effect_sizes %>%
 
 
 
-## Question 1: Adaptation to HMM volatility
-Creates a moving window correlation between participant returns and investor states
-Compares adaptation scores between high and low D-factor participants
+<!-- ## Question 1: Adaptation to HMM volatility -->
+<!-- Creates a moving window correlation between participant returns and investor states -->
+<!-- Compares adaptation scores between high and low D-factor participants -->
 
 ```{r}
 # Load required libraries
@@ -1685,7 +1883,7 @@ ggplot(adaptation_scores, aes(x = d_level, y = adaptation_score)) +
 
 
 
-## Question 2: Strategic reputation building and exploitation
+<!-- ## Question 2: Strategic reputation building and exploitation -->
 
 ```{r}
 
@@ -1731,7 +1929,7 @@ ggplot(period_returns, aes(x = game_period, y = mean_return, color = d_level, gr
 
 
 
-## Question 3: Behavioral stability across rounds
+<!-- ## Question 3: Behavioral stability across rounds -->
 
 ```{r}
 
@@ -1764,7 +1962,7 @@ ggplot(stability_scores, aes(x = d_level, y = return_sd)) +
 
 
 
-## Question 4: Exploitation of high trust states
+<!-- ## Question 4: Exploitation of high trust states -->
 
 
 
@@ -1807,7 +2005,7 @@ ggplot(high_trust_exploitation, aes(x = d_level, y = mean_post_transition_return
 
 
 
-## Focusing on participants whose score is higher than 55 to define high_d
+<!-- ## Focusing on participants whose score is higher than 55 to define high_d -->
 
 ```{r}
 # Read and prepare the data with new D-factor classification
@@ -1876,9 +2074,9 @@ summary(mod_payoffs_new)
 ```
 
 
-## Question 5: Does the investor HMM switch more often when facing high_d participants trustees? 
+<!-- ## Question 5: Does the investor HMM switch more often when facing high_d participants trustees?  -->
 
-No 
+<!-- No  -->
 
 ```{r}
 # Load required libraries
@@ -2112,8 +2310,8 @@ library(ggplot2)
 # 1. Read in the CSV files
 results_pomdp_test<- read_csv("results_pomdp_test.csv")
 results_hybPlan <- read_csv("results_hybPlan_test.csv")
-#results_hybPlan_2a <- read_csv("results_hybPlan_test_2a.csv")
-results_hybPlan_2a <- results_hybPlan_test_2a
+results_hybPlan_2a <- read_csv("results_hybPlan_test_2a.csv")
+#results_hybPlan_2a <- results_hybPlan_test_2a
 results_MFRL <- read_csv("results_MFRL_test.csv")
 results_MBRL <- read_csv("results_mbPlan_test.csv")
 
@@ -2175,6 +2373,10 @@ summary_stats <- results_all_test %>%
 print(summary_stats)
 # 4b. Boxplots for visual comparison
 
+
+
+```
+```{r, include=TRUE}
 # Boxplot for Bin Accuracy
 p1 <- ggplot(results_all_test, aes(x = model, y = bin_accuracy, fill = model)) +
   geom_boxplot() +
@@ -2216,8 +2418,8 @@ p3 <- ggplot(results_all_test, aes(x = test_nll, y = bin_accuracy, color = model
        y = "Bin Accuracy") +
   theme_minimal()
 print(p3)
-
 ```
+
 
 ```{r}
 
@@ -2267,34 +2469,35 @@ posthoc <- emmeans(mixed_result, pairwise ~ model)
 posthoc
 
 ```
+
 ### checking model assumptions
 ```{r}
-library(performance)
-library(see)  # for nice plotting (optional)
-
-check_model(mixed_model)
+# library(performance)
+# library(see)  # for nice plotting (optional)
+# 
+# check_model(mixed_model)
 
 ```
 
 ```{r}
-df <- df %>%
-  mutate(
-    successes = round(accuracy * 10),
-    failures  = 10 - round(accuracy * 10)
-  )
-
-glmer_model <- glmer(
-  cbind(successes, failures) ~ model + (1 | subj_id),
-  data = df, family = binomial
-)
-
-library(emmeans)
-
-emm <- emmeans(glmer_model, pairwise ~ model, type = "response")
-# type = "response" gives results back-transformed to probabilities
-
-emm$emmeans    # mean predicted accuracy for each model
-emm$contrasts  # pairwise contrasts + p-values
+# df <- df %>%
+#   mutate(
+#     successes = round(accuracy * 10),
+#     failures  = 10 - round(accuracy * 10)
+#   )
+# 
+# glmer_model <- glmer(
+#   cbind(successes, failures) ~ model + (1 | subj_id),
+#   data = df, family = binomial
+# )
+# 
+# library(emmeans)
+# 
+# emm <- emmeans(glmer_model, pairwise ~ model, type = "response")
+# # type = "response" gives results back-transformed to probabilities
+# 
+# emm$emmeans    # mean predicted accuracy for each model
+# emm$contrasts  # pairwise contrasts + p-values
 
 
 ```
@@ -2304,15 +2507,15 @@ emm$contrasts  # pairwise contrasts + p-values
 library(dplyr)
 library(tidyr)
 
-df_sub <- df %>% 
-  filter(model %in% c("Hybrid", "MFRL")) %>% 
-  select(subj_id, model, accuracy)
-
-# Convert to wide format for paired test
-df_wide <- df_sub %>%
-  pivot_wider(names_from = model, values_from = accuracy)
-
-wilcox.test(df_wide$Hybrid, df_wide$MFRL, paired = TRUE)
+# df_sub <- df %>% 
+#   filter(model %in% c("Hybrid", "MFRL")) %>% 
+#   select(subj_id, model, accuracy)
+# 
+# # Convert to wide format for paired test
+# df_wide <- df_sub %>%
+#   pivot_wider(names_from = model, values_from = accuracy)
+# 
+# wilcox.test(df_wide$Hybrid, df_wide$MFRL, paired = TRUE)
 ```
 
 

@@ -525,17 +525,7 @@ inverse_bounded <- function(y, lb, ub) {
 This is an enhanced fitting function that uses multiple optimization methods and starting points to improve parameter recovery.
 
 ```{r robust_fitting}
-#' Fit RL model to data with robust optimization
-#' 
-#' This function finds the best-fitting parameters by using multiple
-#' optimization methods and starting points. It handles parameter transformations
-#' to improve stability and provides detailed diagnostics.
-#' 
-#' @param participant_data Dataframe with observed game data
-#' @param param_fixed List of parameters to fix (not estimate)
-#' @param n_multistart Number of different starting points to try
-#' @param verbose Whether to print detailed progress information
-#' @return List with fitted parameters and diagnostics
+
 fit_direct_model_robust <- function(participant_data,
                                   param_fixed = list(alpha=NULL, temp=NULL, envy=NULL, guilt=NULL),
                                   n_multistart = 10,
@@ -551,7 +541,7 @@ fit_direct_model_robust <- function(participant_data,
   # Set bounds for free parameters
   bounds_list <- list(
     alpha = c(0.001, 0.999),  # Avoid exact 0,1 boundaries
-    temp  = c(0.01, 15),
+    temp  = c(0.1, 15),
     envy  = c(0, 5),
     guilt = c(0, 2)
   )
@@ -631,7 +621,9 @@ fit_direct_model_robust <- function(participant_data,
   # Wrapped objective function with transformation
   objective_transformed <- function(unconstrained_params) {
     constrained_params <- transform_params(unconstrained_params)
-    return(direct_learning_model(constrained_params, participant_data, param_fixed))
+    # Add very small L2 regularization
+    reg_term <- 1e-6 * sum(constrained_params^2)
+    return(direct_learning_model(constrained_params, participant_data, param_fixed) + reg_term)
   }
   
   # Create theoretically informed starting points
@@ -639,32 +631,30 @@ fit_direct_model_robust <- function(participant_data,
   
   # First we add theory-based starting points
   if ("alpha" %in% free_names && "temp" %in% free_names) {
-    alpha_starts <- c(0.2, 0.5, 0.8)  # Common learning rates
-    temp_starts <- c(0.5, 1.0, 3.0)    # Common temperature values
+    # Generate a wider range of starting points that cover the trade-off relationship
+    alpha_temp_pairs <- list(
+      c(0.1, 10.0),  # Low alpha, high temp
+      c(0.5, 5.0),   # Medium alpha, medium temp
+      c(0.9, 1.0)    # High alpha, low temp
+    )
     
-    for (a in alpha_starts) {
-      for (t in temp_starts) {
-        init <- lower  # Start with lower bounds
-        idx_alpha <- which(free_names == "alpha")
-        idx_temp <- which(free_names == "temp")
-        
-        # Set specific values for alpha and temp
-        init[idx_alpha] <- a
-        init[idx_temp] <- t
-        
-        # Add envy and guilt values if they're free parameters
-        if ("envy" %in% free_names) {
-          idx_envy <- which(free_names == "envy")
-          init[idx_envy] <- 0.5  # Moderate envy
-        }
-        if ("guilt" %in% free_names) {
-          idx_guilt <- which(free_names == "guilt")
-          init[idx_guilt] <- 0.3  # Moderate guilt
-        }
-        
-        # Transform to unconstrained space and add to init list
-        init_list[[length(init_list) + 1]] <- inverse_transform(init)
+    for (pair in alpha_temp_pairs) {
+      init <- lower  # Start with lower bounds
+      idx_alpha <- which(free_names == "alpha")
+      idx_temp <- which(free_names == "temp")
+      
+      # Set specific values for alpha and temp
+      init[idx_alpha] <- pair[1]
+      init[idx_temp] <- pair[2]
+      
+      # Add guilt values if it's a free parameter
+      if ("guilt" %in% free_names) {
+        idx_guilt <- which(free_names == "guilt")
+        init[idx_guilt] <- runif(1, 0, 0.8)  # Focus on lower values based on grid search
       }
+      
+      # Transform to unconstrained space and add to init list
+      init_list[[length(init_list) + 1]] <- inverse_transform(init)
     }
   }
   
@@ -699,7 +689,8 @@ fit_direct_model_robust <- function(participant_data,
     })
     
     if (!is.null(fit_global)) {
-      # METHOD 2: L-BFGS-B to refine result
+      
+    # METHOD 2: L-BFGS-B to refine result
       fit_lbfgs <- tryCatch({
         optimx(par = fit_global$par,
                fn = objective_transformed,
@@ -730,9 +721,39 @@ fit_direct_model_robust <- function(participant_data,
           converged = fit_lbfgs$convcode[1] == 0
         )
       }
+      
+      # METHOD 3: Try nlminb optimizer for better boundary handling
+      fit_nlminb <- tryCatch({
+        nlminb(start = fit_global$par,
+               objective = objective_transformed,
+               control = list(eval.max = 1000, iter.max = 1000))
+      }, error = function(e) {
+        if (verbose) cat("nlminb optimization failed:", e$message, "\n")
+        NULL
+      })
+      
+      if (!is.null(fit_nlminb)) {
+        val <- fit_nlminb$objective
+        if (val < best_nll) {
+          best_nll <- val
+          best_par <- transform_params(fit_nlminb$par)
+          
+          if (verbose) {
+            cat("New best value from nlminb:", val, "with params:", best_par, "\n")
+          }
+        }
+        
+        # Store fit for diagnostics
+        all_fits[[length(all_fits) + 1]] <- list(
+          method = "nlminb after SANN",
+          value = val,
+          params = transform_params(fit_nlminb$par),
+          converged = fit_nlminb$convergence == 0
+        )
+      }
     }
     
-    # METHOD 3: Try Nelder-Mead directly
+    # METHOD 4: Try Nelder-Mead directly
     fit_nm <- tryCatch({
       optim(par = init,
             fn = objective_transformed,
@@ -817,120 +838,6 @@ fit_direct_model_robust <- function(participant_data,
 This function fits the model to data from multiple participants in parallel, using the approach from the original code provided.
 
 ```{r parallel_fitting}
-#' Fit model to data from multiple participants in parallel
-#' 
-#' @param full_data Dataframe with data from all participants
-#' @param param_fixed List of parameters to fix (not estimate)
-#' @param n_multistart Number of different starting points to try
-#' @param n_cores Number of CPU cores to use for parallel processing
-#' @return Dataframe with fitting results for all participants
-# fit_all_participants_parallel <- function(full_data, 
-#                                          param_fixed = list(), 
-#                                          n_multistart = 10, 
-#                                          n_cores = 8) {
-#   # Split data by participant
-#   participants <- split(full_data, full_data$playerId)
-#   
-#   # Set up parallel cluster
-#   cl <- makeCluster(n_cores)
-#   
-#   # Export necessary functions to cluster
-#   clusterExport(cl, varlist = c(
-#     "direct_learning_model", "fit_direct_model_robust",
-#     "transform_bounded", "inverse_bounded",
-#     "get_investment_bin", "get_return_bin", "calculate_fs_utility",
-#     "param_fixed", "n_multistart",
-#     "randomLHS"
-#   ), envir = environment())
-#   
-#   # Load required libraries in each cluster node
-#   clusterEvalQ(cl, {
-#     library(tidyverse)
-#     library(optimx)
-#     library(lhs)
-#   })
-#   
-#   # Fit model to each participant's data in parallel
-#   if (requireNamespace("pbapply", quietly = TRUE)) {
-#     results_list <- pbapply::pblapply(participants, function(p_data) {
-#       tryCatch({
-#         fit_result <- fit_direct_model_robust(
-#           p_data, 
-#           param_fixed = param_fixed, 
-#           n_multistart = n_multistart,
-#           verbose = FALSE
-#         )
-#         
-#         # Format results
-#         data.frame(
-#           playerId = unique(p_data$playerId),
-#           neg_log_lik = fit_result$neg_log_lik,
-#           aic = fit_result$aic,
-#           bic = fit_result$bic,
-#           alpha = ifelse(is.null(fit_result$params$alpha), NA, fit_result$params$alpha),
-#           temp = ifelse(is.null(fit_result$params$temp), NA, fit_result$params$temp),
-#           envy = ifelse(is.null(fit_result$params$envy), NA, fit_result$params$envy),
-#           guilt = ifelse(is.null(fit_result$params$guilt), NA, fit_result$params$guilt),
-#           converged = !is.null(fit_result$converged) && fit_result$converged,
-#           message = ifelse(is.null(fit_result$message), "Error", fit_result$message),
-#           stringsAsFactors = FALSE
-#         )
-#       }, error = function(e) {
-#         data.frame(
-#           playerId = unique(p_data$playerId),
-#           neg_log_lik = NA, aic = NA, bic = NA,
-#           alpha = NA, temp = NA, envy = NA, guilt = NA,
-#           converged = FALSE,
-#           message = as.character(e),
-#           stringsAsFactors = FALSE
-#         )
-#       })
-#     }, cl = cl)
-#   } else {
-#     results_list <- parLapplyLB(cl, participants, function(p_data) {
-#       tryCatch({
-#         fit_result <- fit_direct_model_robust(
-#           p_data, 
-#           param_fixed = param_fixed, 
-#           n_multistart = n_multistart,
-#           verbose = FALSE
-#         )
-#         
-#         # Format results
-#         data.frame(
-#           playerId = unique(p_data$playerId),
-#           neg_log_lik = fit_result$neg_log_lik,
-#           aic = fit_result$aic,
-#           bic = fit_result$bic,
-#           alpha = ifelse(is.null(fit_result$params$alpha), NA, fit_result$params$alpha),
-#           temp = ifelse(is.null(fit_result$params$temp), NA, fit_result$params$temp),
-#           envy = ifelse(is.null(fit_result$params$envy), NA, fit_result$params$envy),
-#           guilt = ifelse(is.null(fit_result$params$guilt), NA, fit_result$params$guilt),
-#           converged = !is.null(fit_result$converged) && fit_result$converged,
-#           message = ifelse(is.null(fit_result$message), "Error", fit_result$message),
-#           stringsAsFactors = FALSE
-#         )
-#       }, error = function(e) {
-#         data.frame(
-#           playerId = unique(p_data$playerId),
-#           neg_log_lik = NA, aic = NA, bic = NA,
-#           alpha = NA, temp = NA, envy = NA, guilt = NA,
-#           converged = FALSE,
-#           message = as.character(e),
-#           stringsAsFactors = FALSE
-#         )
-#       })
-#     })
-#   }
-#   
-#   # Stop the cluster
-#   stopCluster(cl)
-#   
-#   # Combine results
-#   results_df <- do.call(rbind, results_list)
-#   return(results_df)
-# }
-
 #' Fit model to data from multiple participants in parallel
 #' 
 #' @param data Dataframe with data from all participants
@@ -1071,8 +978,6 @@ fit_all_participants_parallel <- function(data,
   
   return(results_df)
 }
-
-#fit_all_participants_parallel(test_data2)
 ```
 
 # 8. Out-of-Sample Testing
@@ -1437,589 +1342,6 @@ fit_and_test_all_participants <- function(full_data,
 These functions test if the model parameters can be reliably recovered from simulated data. This is a critical diagnostic tool for assessing parameter identifiability.
 
 ```{r parameter_recovery}
-#' Test parameter recovery with simulated data (Parallel Version)
-#' 
-#' @param n_sims Number of simulations to run
-#' @param game_size Number of rounds per game
-#' @param param_fixed List of parameters to fix (not estimate)
-#' @param param_ranges List of parameter ranges to sample from
-#' @param n_multistart Number of different starting points to try
-#' @param n_cores Number of cores to use for parallel processing
-#' @param verbose Whether to print detailed progress information
-#' @param progress_callback Function to call to update progress
-#' @return List with parameter recovery results
-param_recovery_experiment <- function(n_sims=100, game_size=25, 
-                                             param_fixed=list(), 
-                                             param_ranges=NULL,
-                                             n_multistart=10,
-                                             n_cores=parallel::detectCores()-1,
-                                             verbose=FALSE,
-                                             progress_callback=NULL) {
-  # Set up parameter ranges if not provided
-  if (is.null(param_ranges)) {
-    param_ranges <- list(
-      alpha = seq(0.05, 0.9, length.out=5),
-      temp = c(0.5, 1, 2, 4),
-      envy = c(0.2, 1, 2),
-      guilt = c(0.2, 0.5, 1)
-    )
-  }
-  
-  # Create a grid of parameters, respecting fixed parameters
-  grid_data <- list()
-  for (param in c("alpha", "temp", "envy", "guilt")) {
-    if (!is.null(param_fixed[[param]])) {
-      grid_data[[param]] <- param_fixed[[param]]
-    } else {
-      grid_data[[param]] <- param_ranges[[param]]
-    }
-  }
-  
-  param_grid <- expand.grid(grid_data)
-  
-  # Limit to n_sims combinations if needed
-  if (nrow(param_grid) > n_sims) {
-    param_grid <- param_grid[sample(nrow(param_grid), n_sims), ]
-  }
-  
-  # Setup parallel cluster
-  cl <- parallel::makeCluster(n_cores)
-  
-  on.exit(parallel::stopCluster(cl))
-  
-  # Export necessary functions and objects to all workers
-  parallel::clusterExport(cl, varlist = c(
-    "simulate_2games_data_mf_hmm", 
-    "fit_direct_model_robust",
-    "direct_learning_model",
-    "transform_bounded",
-    "inverse_bounded",
-    "get_investment_bin",
-    "get_return_bin",
-    "calculate_fs_utility",
-    "state_to_bin",
-    "bin_to_investment",
-    "bin_to_return_prop",
-    "updateState",
-    "updateState_vol",
-    "param_fixed",
-    "n_multistart",
-    "randomLHS",
-    "game_size"
-  ), envir = environment())
-  
-  # Load required libraries on all workers
-  parallel::clusterEvalQ(cl, {
-    library(tidyverse)
-    library(optimx)
-    library(lhs)
-  })
-  
-  # Create a function to process a single simulation
-  process_sim <- function(i, param_grid, param_fixed, game_size, n_multistart, verbose) {
-    # Extract parameters for this simulation
-    params_true <- list(
-      alpha = param_grid$alpha[i],
-      temp = param_grid$temp[i],
-      envy = param_grid$envy[i],
-      guilt = param_grid$guilt[i]
-    )
-    
-    # Override with fixed parameters just to be sure
-    for (param in names(param_fixed)) {
-      params_true[[param]] <- param_fixed[[param]]
-    }
-    
-    # Simulate data
-    set.seed(i)  # For reproducibility
-    sim_data <- simulate_2games_data_mf_hmm(params_true, game_size=game_size, playerId=i)
-    
-    # Fit model
-    fit_result <- tryCatch({
-      fit_direct_model_robust(
-        sim_data, 
-        param_fixed=param_fixed,
-        n_multistart=n_multistart,
-        verbose=FALSE  # Always set verbose to FALSE in parallel mode
-      )
-    }, error = function(e) {
-      list(params=NULL, converged=FALSE, message=as.character(e))
-    })
-    
-    # Return the results
-    list(
-      sim_id = i,
-      true_params = params_true,
-      fit_result = fit_result,
-      # Don't return full sim_data to save memory
-      sim_summary = list(
-        n_rounds = nrow(sim_data),
-        avg_investment = mean(sim_data$investment, na.rm=TRUE),
-        avg_return = mean(sim_data$return, na.rm=TRUE)
-      )
-    )
-  }
-  
-  # Run simulations in parallel with progress tracking
-  if (requireNamespace("pbapply", quietly = TRUE) && verbose) {
-    results <- pbapply::pblapply(1:nrow(param_grid), function(i) {
-      process_sim(i, param_grid, param_fixed, game_size, n_multistart, FALSE)
-    }, cl = cl)
-  } else {
-    results <- parallel::parLapply(cl, 1:nrow(param_grid), function(i) {
-      process_sim(i, param_grid, param_fixed, game_size, n_multistart, FALSE)
-    })
-  }
-  
-  # Compile all results into a dataframe
-  summary_df <- do.call(rbind, lapply(results, function(r) {
-    if (is.null(r$fit_result$params) || any(is.na(r$fit_result$params))) {
-      data.frame(
-        sim_id = r$sim_id,
-        true_alpha = r$true_params$alpha,
-        fit_alpha = NA,
-        alpha_error = NA,
-        true_temp = r$true_params$temp,
-        fit_temp = NA,
-        temp_error = NA,
-        true_envy = r$true_params$envy,
-        fit_envy = NA,
-        envy_error = NA,
-        true_guilt = r$true_params$guilt,
-        fit_guilt = NA,
-        guilt_error = NA,
-        neg_log_lik = NA,
-        converged = FALSE,
-        stringsAsFactors = FALSE
-      )
-    } else {
-      data.frame(
-        sim_id = r$sim_id,
-        true_alpha = r$true_params$alpha,
-        fit_alpha = r$fit_result$params$alpha,
-        alpha_error = abs(r$true_params$alpha - r$fit_result$params$alpha),
-        true_temp = r$true_params$temp,
-        fit_temp = r$fit_result$params$temp,
-        temp_error = abs(r$true_params$temp - r$fit_result$params$temp),
-        true_envy = r$true_params$envy,
-        fit_envy = r$fit_result$params$envy,
-        envy_error = abs(r$true_params$envy - r$fit_result$params$envy),
-        true_guilt = r$true_params$guilt,
-        fit_guilt = r$fit_result$params$guilt,
-        guilt_error = abs(r$true_params$guilt - r$fit_result$params$guilt),
-        neg_log_lik = r$fit_result$neg_log_lik,
-        converged = TRUE,
-        stringsAsFactors = FALSE
-      )
-    }
-  }))
-  
-  # Calculate summary statistics (same as before)
-  # [rest of the function remains the same]
-  
-  all_params <- c("alpha", "temp", "envy", "guilt")
-  free_params <- all_params[!all_params %in% names(param_fixed)]
-  
-  # Calculate correlations for free parameters
-  correlations <- lapply(free_params, function(param) {
-    true_col <- paste0("true_", param)
-    fit_col <- paste0("fit_", param)
-    values <- summary_df[, c(true_col, fit_col)]
-    
-    # Need enough non-NA pairs for correlation
-    valid_pairs <- sum(!is.na(values[,1]) & !is.na(values[,2]))
-    if (valid_pairs < 3) {
-      return(NA)
-    }
-    
-    cor(values[,1], values[,2], use="complete.obs")
-  })
-  names(correlations) <- free_params
-  
-  # Calculate mean errors for free parameters
-  mean_errors <- lapply(free_params, function(param) {
-    err_col <- paste0(param, "_error")
-    mean(summary_df[[err_col]], na.rm=TRUE)
-  })
-  names(mean_errors) <- free_params
-  
-  # Calculate success rate
-  success_rate <- mean(!is.na(summary_df$neg_log_lik))
-  
-  # Return complete results
-  list(
-    results = results,  # Contains individual simulation results
-    summary_df = summary_df,
-    correlations = correlations,
-    mean_errors = mean_errors,
-    success_rate = success_rate
-  )
-}
-
-
-########################################
-plot_recovery_results <- function(recovery_results, 
-                                      output_dir = "recovery_plots",
-                                      base_filename = "recovery",
-                                      display = FALSE) {
-  library(ggplot2)
-  
-  # Create output directory if it doesn't exist
-  if (!dir.exists(output_dir)) {
-    dir.create(output_dir, recursive = TRUE)
-  }
-  
-  # Extract data
-  all_params <- c("alpha", "temp", "envy", "guilt")
-  df <- recovery_results$summary_df
-  
-  # Store file paths for saved plots
-  saved_files <- list()
-  
-  # Create and save individual plots first (safer than combined grid)
-  for (param in all_params) {
-    true_col <- paste0("true_", param)
-    fit_col <- paste0("fit_", param)
-    
-    # Skip if parameter was fixed
-    if (!(true_col %in% colnames(df)) || !(fit_col %in% colnames(df))) {
-      # Create a simple "fixed parameter" plot
-      p <- ggplot() + 
-        annotate("text", x = 0.5, y = 0.5, label = "Parameter was fixed") +
-        theme_minimal() +
-        labs(title = paste(param, "(Fixed)"))
-    } else {
-      # Extract data
-      plot_df <- data.frame(
-        true_val = df[[true_col]],
-        fit_val = df[[fit_col]]
-      )
-      
-      # Remove NAs
-      plot_df <- plot_df[complete.cases(plot_df),]
-      
-      if (nrow(plot_df) < 3) {
-        # Create "not enough data" plot
-        p <- ggplot() + 
-          annotate("text", x = 0.5, y = 0.5, label = "Not enough data") +
-          theme_minimal() +
-          labs(title = paste(param, "(Not enough data)"))
-      } else {
-        # Calculate correlation
-        r <- cor(plot_df$true_val, plot_df$fit_val)
-        
-        # Create normal recovery plot
-        p <- ggplot(plot_df, aes(x = true_val, y = fit_val)) +
-          geom_point(color = "blue", alpha = 0.5) +
-          geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red") +
-          geom_smooth(method = "lm", se = TRUE, color = "blue") +
-          labs(
-            title = param,
-            x = paste("True", param),
-            y = paste("Estimated", param)
-          ) +
-          annotate("text", 
-                  x = min(plot_df$true_val), 
-                  y = max(plot_df$fit_val),
-                  label = paste("r =", round(r, 2)),
-                  hjust = 0, vjust = 1) +
-          theme_minimal()
-      }
-    }
-    
-    # Save individual plot to file
-    filename <- file.path(output_dir, paste0(base_filename, "_", param, ".png"))
-    ggsave(filename, p, width = 6, height = 5, dpi = 100)
-    saved_files[[param]] <- filename
-    
-    # Force garbage collection
-    rm(p)
-    gc()
-  }
-  
-  # Try to create a combined plot file if requested
-  if (display) {
-    tryCatch({
-      # Load individual plots
-      plot_list <- list()
-      for (param in all_params) {
-        # Skip if no file was saved for this parameter
-        if (!param %in% names(saved_files)) next
-        
-        # Load the plot from file
-        filename <- saved_files[[param]]
-        
-        # Create placeholder in list
-        if (!(true_col %in% colnames(df)) || !(fit_col %in% colnames(df))) {
-          plot_list[[param]] <- ggplot() + 
-            annotate("text", x = 0.5, y = 0.5, label = "Parameter was fixed") +
-            theme_minimal() +
-            labs(title = paste(param, "(Fixed)"))
-        } else {
-          # Extract data
-          plot_df <- data.frame(
-            true_val = df[[true_col]],
-            fit_val = df[[fit_col]]
-          )
-          
-          # Remove NAs
-          plot_df <- plot_df[complete.cases(plot_df),]
-          
-          if (nrow(plot_df) < 3) {
-            plot_list[[param]] <- ggplot() + 
-              annotate("text", x = 0.5, y = 0.5, label = "Not enough data") +
-              theme_minimal() +
-              labs(title = paste(param, "(Not enough data)"))
-          } else {
-            # Calculate correlation
-            r <- cor(plot_df$true_val, plot_df$fit_val)
-            
-            # Create plot
-            plot_list[[param]] <- ggplot(plot_df, aes(x = true_val, y = fit_val)) +
-              geom_point(color = "blue", alpha = 0.5) +
-              geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red") +
-              geom_smooth(method = "lm", se = TRUE, color = "blue") +
-              labs(
-                title = param,
-                x = paste("True", param),
-                y = paste("Estimated", param)
-              ) +
-              annotate("text", 
-                      x = min(plot_df$true_val), 
-                      y = max(plot_df$fit_val),
-                      label = paste("r =", round(r, 2)),
-                      hjust = 0, vjust = 1) +
-              theme_minimal()
-          }
-        }
-      }
-      
-      # Save combined plot to file
-      filename <- file.path(output_dir, paste0(base_filename, "_combined.png"))
-      combined <- gridExtra::grid.arrange(grobs = plot_list, ncol = 2)
-      ggsave(filename, combined, width = 12, height = 10, dpi = 100)
-      saved_files[["combined"]] <- filename
-    }, error = function(e) {
-      message("Error creating combined plot: ", e$message)
-      message("Individual plots were still saved successfully.")
-    })
-  }
-  
-  # Return the list of saved files
-  return(saved_files)
-}
-
-######################################################
-#' Run a full parameter recovery analysis with safe plotting
-#' 
-#' @param n_sims Number of simulations for initial test
-#' @param game_size Number of rounds per game
-#' @param verbose Whether to print detailed progress information
-#' @param save_plots Whether to save plots to files
-#' @param display_plots Whether to attempt displaying plots (may crash)
-#' @param output_dir Directory for saved plots
-#' @return List with analysis results
-run_recovery_analysis <- function(n_sims = 10, 
-                                     game_size = 25, 
-                                     verbose = FALSE,
-                                     save_plots = TRUE,
-                                     display_plots = FALSE,
-                                     output_dir = "recovery_plots") {
-  # Track timing
-  start_time <- Sys.time()
-  
-  # Run a pilot simulation to estimate time
-  if (verbose) cat("Running pilot simulation to estimate total time...\n")
-  pilot_start <- Sys.time()
-  pilot_recovery <- param_recovery_experiment(
-    n_sims = 1, 
-    game_size = game_size,
-    verbose = FALSE
-  )
-  pilot_end <- Sys.time()
-  
-  # Estimate total time
-  pilot_duration <- as.numeric(difftime(pilot_end, pilot_start, units = "secs"))
-  estimated_total <- pilot_duration * n_sims
-  
-  if (verbose) {
-    cat("Estimated total time: ", 
-        sprintf("%.1f minutes (%.1f hours)\n", 
-                estimated_total/60, estimated_total/3600))
-  }
-  
-  # Check if we should continue
-  if (estimated_total > 3600 && interactive()) {
-    response <- readline(prompt = paste0(
-      "This analysis may take approximately ", 
-      round(estimated_total/3600, 1), 
-      " hours. Continue? (y/n): "))
-    if (tolower(substr(response, 1, 1)) != "y") {
-      cat("Analysis cancelled by user.\n")
-      return(NULL)
-    }
-  }
-  
-  # Step 1: Run parameter recovery experiment with all parameters free
-  if (verbose) cat("Running parameter recovery experiment with all parameters free...\n")
-  
-  # Track progress during long computations
-  progress_tracker <- function(i, n_sims) {
-    if (verbose && i %% max(1, floor(n_sims/10)) == 0) {
-      elapsed <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
-      estimated_remaining <- (elapsed / i) * (n_sims - i)
-      cat(sprintf("[%d/%d] %.1f%% complete. Est. remaining: %.1f minutes\n", 
-                  i, n_sims, 100*i/n_sims, estimated_remaining/60))
-      
-      # Report memory usage
-      mem_used <- gc(reset = TRUE)
-      cat(sprintf("Memory usage: %.2f MB\n", mem_used[2, 2]))
-    }
-  }
-  
-  # Main simulation
-  all_free_recovery <- param_recovery_experiment(
-    n_sims = n_sims, 
-    game_size = game_size,
-    verbose = verbose,
-    progress_callback = progress_tracker
-  )
-  
-  # Step 2: Analyze which parameters can be recovered reliably
-  if (verbose) cat("Analyzing parameter identifiability...\n")
-  
-  # Calculate correlations between true and recovered parameters
-  correlations <- all_free_recovery$correlations
-  
-  # Determine which parameters to fix based on recovery quality
-  reliable_threshold <- 0.6  # Correlation threshold for reliable recovery
-  
-  params_to_fix <- c()
-  suggested_values <- list()
-  
-  for (param in names(correlations)) {
-    if (is.na(correlations[[param]]) || correlations[[param]] < reliable_threshold) {
-      params_to_fix <- c(params_to_fix, param)
-      
-      # Suggest median value from literature or previous studies
-      if (param == "envy") {
-        suggested_values[[param]] <- 1.0  # Common value for envy
-      } else if (param == "guilt") {
-        suggested_values[[param]] <- 0.5  # Common value for guilt
-      } else if (param == "alpha") {
-        suggested_values[[param]] <- 0.3  # Common learning rate
-      } else if (param == "temp") {
-        suggested_values[[param]] <- 1.5  # Common temperature
-      }
-    }
-  }
-  
-  # Step 3: Run recovery with poorly identified parameters fixed
-  if (length(params_to_fix) > 0) {
-    if (verbose) cat("Running parameter recovery with fixed parameters:", 
-                    paste(params_to_fix, collapse=", "), "...\n")
-    
-    param_fixed <- list()
-    for (param in params_to_fix) {
-      param_fixed[[param]] <- suggested_values[[param]]
-    }
-    
-    fixed_recovery <- param_recovery_experiment(
-      n_sims = n_sims,
-      game_size = game_size,
-      param_fixed = param_fixed,
-      verbose = verbose,
-      progress_callback = progress_tracker
-    )
-  } else {
-    if (verbose) cat("All parameters appear to be reliably recovered.\n")
-    fixed_recovery <- NULL
-  }
-  
-  # Step 4: Save or display plots
-  if (save_plots) {
-    if (verbose) cat("Saving recovery plots to files...\n")
-    
-    # Save plots for all free parameters
-    plots_all_free <- plot_recovery_results(
-      all_free_recovery,
-      output_dir = output_dir,
-      base_filename = "all_free",
-      display = display_plots
-    )
-    
-    # Save plots for fixed parameters if applicable
-    if (!is.null(fixed_recovery)) {
-      plots_fixed <- plot_recovery_results(
-        fixed_recovery,
-        output_dir = output_dir,
-        base_filename = "fixed_params",
-        display = display_plots
-      )
-    }
-    
-    if (verbose) {
-      cat("Plots saved to directory:", normalizePath(output_dir), "\n")
-    }
-  }
-  
-  # Step 5: Generate recommendations
-  if (verbose) {
-    cat("\nParameter Recovery Analysis Results:\n")
-    cat("------------------------------------\n")
-    
-    for (param in names(correlations)) {
-      cat(param, ": ")
-      
-      if (is.na(correlations[[param]])) {
-        cat("Insufficient data for correlation calculation\n")
-      } else if (correlations[[param]] > 0.8) {
-        cat("Excellent recovery (r=", round(correlations[[param]], 2), 
-            "). Keep as free parameter.\n", sep="")
-      } else if (correlations[[param]] > 0.6) {
-        cat("Good recovery (r=", round(correlations[[param]], 2), 
-            "). Can be kept as free parameter.\n", sep="")
-      } else if (correlations[[param]] > 0.4) {
-        cat("Moderate recovery (r=", round(correlations[[param]], 2), 
-            "). Consider fixing or using informative priors.\n", sep="")
-      } else {
-        cat("Poor recovery (r=", round(correlations[[param]], 2), 
-            "). Recommended to fix at literature value: ", 
-            suggested_values[[param]], "\n", sep="")
-      }
-    }
-  }
-  
-  # Force garbage collection
-  gc(verbose = FALSE)
-  
-  # Calculate total runtime
-  end_time <- Sys.time()
-  total_duration <- as.numeric(difftime(end_time, start_time, units = "secs"))
-  
-  if (verbose) {
-    cat("\nTotal runtime: ", 
-        sprintf("%.1f minutes (%.1f hours)\n", 
-                total_duration/60, total_duration/3600))
-  }
-  
-  # Return all results
-  list(
-    all_free_recovery = all_free_recovery,
-    fixed_recovery = fixed_recovery,
-    params_to_fix = params_to_fix,
-    suggested_values = suggested_values,
-    runtime = list(
-      start_time = start_time,
-      end_time = end_time,
-      total_seconds = total_duration
-    )
-  )
-}
-
-```
-
-```{r parameter_recovery}
 #' Plot parameter recovery results to files (no display)
 #' 
 #' @param recovery_results Results from param_recovery_experiment
@@ -2178,6 +1500,7 @@ plot_recovery_results_safe <- function(recovery_results,
   return(saved_files)
 }
 
+################################################################
 #' Parallelized parameter recovery experiment with progress tracking
 #' 
 #' @param n_sims Number of simulations to run
@@ -2842,8 +2165,7 @@ run_full_analysis <- function(data,
 }
 ```
 
-# Example Usage
-
+#  Fitting with all free parameters 
 
 ```{r example, eval=FALSE}
 # 1. Load your data
@@ -2857,22 +2179,35 @@ run_full_analysis <- function(data,
 # # For example, if envy and guilt are poorly recovered, we might fix them:
 # fixed_params <- list(envy=1.0, guilt=0.5)
 # 
-# # 4. Fit the model with fixed parameters (parallel)
-# fit_result <- fit_all_participants_parallel(
-#   data,
-#   param_fixed=fixed_params,
-#   n_multistart=10,
-#   n_cores=4  # Adjust based on your computer
-# )
+# 4. Fit the model with fixed parameters (parallel)
+fit_result_MFRL_all_37 <- fit_all_participants_parallel(
+  final_data,
+  param_fixed=list(),
+  n_multistart=10,
+  n_cores=9  # Adjust based on your computer
+)
+# 7. Save results
+write.csv(fit_result_MFRL_all_37, "fit_result_MFRL_all_37.csv", row.names=FALSE)
 # 
 # # 5. Or perform out-of-sample testing
-# oos_results <- fit_and_test_all_participants(
-#   data,
-#   param_fixed=fixed_params,
-#   n_multistart=10,
-#   n_cores=4,
-#   train_cutoff=20  # Use first 20 rounds for training
-# )
+oos_results_free <- fit_and_test_all_participants(
+  final_data,
+  param_fixed=list(),
+  n_multistart=10,
+  n_cores=9,
+  train_cutoff=20  # Use first 20 rounds for training
+)
+
+cat("\nOut-of-Sample Testing Results:\n")
+cat("-----------------------------\n")
+cat("Average bin prediction accuracy:", mean(oos_results_free$bin_accuracy, na.rm=TRUE), "\n")
+cat("Convergence rate:", mean(!is.na(oos_results_free$training_fit_nll)), "\n")
+
+# Print parameter summaries
+for (param in c("alpha", "temp", "envy", "guilt")) {
+    cat(param, "mean:", mean(oos_results_free[[param]], na.rm=TRUE), 
+        "SD:", sd(oos_results_free[[param]], na.rm=TRUE), "\n")
+  }
 # 
 # # 6. Or use the complete analysis pipeline
 # full_results <- run_full_analysis(
@@ -2888,8 +2223,7 @@ run_full_analysis <- function(data,
 # 
 # 
 # ######
-# # 7. Save results
-# write.csv(fit_result, "MFRL3_7_fit_results.csv", row.names=FALSE)
+
 
 # 8. Visualize parameter distributions
 # hist(fit_result$alpha, main="Distribution of Learning Rate", xlab="Alpha", breaks=20)
@@ -2921,56 +2255,119 @@ print("Correlations after fixing parameters:")
 print(fixed_correlations)
 ```
 
-```{r}
-# 3. Based on recovery results, determine which parameters to fix
-# For example, if envy and guilt are poorly recovered, we might fix them:
-fixed_params <- list(temp=1.5, envy=1)
+# Fixing envy to 0 and temperature to 1 
 
+```{r}
+final_data <- read.csv("data/final_data.csv")
 # 4. Fit the model with fixed parameters (parallel)
-fit_result_MFRL_v37 <- fit_all_participants_parallel(
+fit_result_MFRL_t1e0 <- fit_all_participants_parallel(
   final_data,
-  param_fixed=fixed_params,
+  param_fixed=list(temp=1, envy=0),
   n_multistart=10,
   verbose=TRUE
 )
 
 # Save the results
-write.csv(fit_result_MFRL_v37 , "fit_result_MFRL_v37.csv", row.names = FALSE)
+write.csv(fit_result_MFRL_t1e0 , "fit_result_MFRL_t1e0", row.names = FALSE)
 
 # View summary of fitted parameters
-summary(fit_result_MFRL_v37[, c("alpha", "temp", "envy", "guilt")])
+summary(fit_result_MFRL_t1e0[, c("alpha", "temp", "envy", "guilt")])
 
-```
 
-```{r}
-# 5. Or perform out-of-sample testing
-oos_results <- fit_and_test_all_participants(
-  test_data2,
-  param_fixed=fixed_params,
+################ OOS testing
+# Or perform out-of-sample testing
+
+fixed_params_t1e0 <- list(temp=1, envy=0)
+oos_results_t1e0 <- fit_and_test_all_participants(
+  final_data,
+  param_fixed=fixed_params_t1e0,
   n_multistart=10,
-  n_cores=8,
+  n_cores=9,
   train_cutoff=20  # Use first 20 rounds for training
 )
 
 cat("\nOut-of-Sample Testing Results:\n")
 cat("-----------------------------\n")
-cat("Average bin prediction accuracy:", mean(oos_results$bin_accuracy, na.rm=TRUE), "\n")
-cat("Convergence rate:", mean(!is.na(oos_results$training_fit_nll)), "\n")
+cat("Average bin prediction accuracy:", mean(oos_results_t1e0$bin_accuracy, na.rm=TRUE), "\n")
+cat("Convergence rate:", mean(!is.na(oos_results_t1e0$training_fit_nll)), "\n")
 
 # Print parameter summaries
 for (param in c("alpha", "temp", "envy", "guilt")) {
-  if (param %in% names(fixed_params)) {
-    cat(param, "was fixed at", fixed_params[[param]], "\n")
+  if (param %in% names(fixed_params_t1e0)) {
+    cat(param, "was fixed at", fixed_params_t1e0[[param]], "\n")
   } else {
-    cat(param, "mean:", mean(oos_results[[param]], na.rm=TRUE), 
-        "SD:", sd(oos_results[[param]], na.rm=TRUE), "\n")
+    cat(param, "mean:", mean(oos_results_t1e0[[param]], na.rm=TRUE), 
+        "SD:", sd(oos_results_t1e0[[param]], na.rm=TRUE), "\n")
+  }
+}
+
+
+```
+
+# Fixing envy to 1 and temp to 1.5
+```{r}
+# 3. Based on recovery results, determine which parameters to fix
+# For example, if envy and guilt are poorly recovered, we might fix them:
+fixed_params_t1.5_e1 <- list(temp=1.5, envy=1)
+
+# 4. Fit the model with fixed parameters (parallel)
+fit_result_MFRL_t15e1 <- fit_all_participants_parallel(
+  final_data,
+  param_fixed=fixed_params_t1.5_e1,
+  n_multistart=10,
+  verbose=TRUE
+)
+
+# Save the results
+write.csv(fit_result_MFRL_t15e1 , "fit_result_MFRL_t15e1.csv", row.names = FALSE)
+
+# View summary of fitted parameters
+summary(fit_result_MFRL_t15e1[, c("alpha", "temp", "envy", "guilt")])
+
+```
+
+```{r}
+# 5. Or perform out-of-sample testing
+oos_results_t15_e1 <- fit_and_test_all_participants(
+  final_data,
+  param_fixed=fixed_params_t1.5_e1,
+  n_multistart=10,
+  n_cores=9,
+  train_cutoff=20  # Use first 20 rounds for training
+)
+
+cat("\nOut-of-Sample Testing Results:\n")
+cat("-----------------------------\n")
+cat("Average bin prediction accuracy:", mean(oos_results_t15_e1$bin_accuracy, na.rm=TRUE), "\n")
+cat("Convergence rate:", mean(!is.na(oos_results_t15_e1$training_fit_nll)), "\n")
+
+# Print parameter summaries
+for (param in c("alpha", "temp", "envy", "guilt")) {
+  if (param %in% names(fixed_params_t1.5_e1)) {
+    cat(param, "was fixed at", fixed_params_t1.5_e1[[param]], "\n")
+  } else {
+    cat(param, "mean:", mean(oos_results_t15_e1[[param]], na.rm=TRUE), 
+        "SD:", sd(oos_results_t15_e1[[param]], na.rm=TRUE), "\n")
   }
 }
 ```
 
 ```{r}
 # Merge with payoff/opponent data
-results_features_MFRL37 <- fit_result_MFRL_v37 %>%
+payoff_data <- final_data  %>%
+  dplyr::select(playerId, d_level,cal_scaled, dec_scaled, sad_scaled, vin_scaled, opponent.f, gameNum.f, volatile_first, payoffTrust1, payoffTrust2,) %>%
+  distinct() %>%
+   mutate(
+      payoff = case_when(
+        gameNum.f == "first game" ~ payoffTrust1,
+        gameNum.f == "second game" ~ payoffTrust2
+      )
+    ) %>%
+    dplyr::select(-payoffTrust1, -payoffTrust2)  # Remove unused columns
+
+payoff_data_mean <- payoff_data %>%  group_by(playerId, d_level, cal_scaled, vin_scaled, dec_scaled, sad_scaled) %>% summarise(mean_payoff = mean(payoff))
+
+results_features_MFRLt15e1 <- fit_result_MFRL_t15e1 %>%
   left_join(
     payoff_data_mean, 
     by = c( "playerId")
@@ -2981,12 +2378,12 @@ library(ggcorrplot)
 library(GGally)
 
 
-vars_of_interest_MFRL37 <- results_features_MFRL37 %>%
+vars_of_interest_MFRt15e1 <- results_features_MFRLt15e1 %>%
   dplyr::select(alpha, guilt, mean_payoff, cal_scaled, dec_scaled, sad_scaled, vin_scaled)
 
 # Focus on key parameters (adjust as needed)
 ggpairs(
-  vars_of_interest_MFRL37,
+  vars_of_interest_MFRt15e1,
   columns = c("alpha", "guilt", "mean_payoff", "cal_scaled","dec_scaled", "sad_scaled", "vin_scaled" ),
   title = "Pairwise Parameter Relationships"
 )
@@ -2994,15 +2391,33 @@ ggpairs(
 
 ```{r}
 # Model alpha as a function of ( d_factor subscales and payoff, etc.)
-mod_alpha_mfrl <- lm( alpha ~ cal_scaled + dec_scaled + sad_scaled + vin_scaled + mean_payoff, data = results_features_MFRL37)
+mod_alpha_mfrl <- lm( alpha ~ cal_scaled + dec_scaled + sad_scaled + vin_scaled + mean_payoff, data = results_features_MFRLt15e1)
 summary(mod_alpha_mfrl)
 
 
 # Model guilt 
-mod_guilt_mfrl <- lm( guilt ~ cal_scaled + dec_scaled + sad_scaled + vin_scaled + mean_payoff, data = results_features_MFRL37)
+mod_guilt_mfrl <- lm( guilt ~ cal_scaled + dec_scaled + sad_scaled + vin_scaled + mean_payoff, data = results_features_MFRLt15e1)
 summary(mod_guilt_mfrl)
 
 ```
+
+```{r}
+results_features_MFRL_t1e0 <- fit_result_MFRL_t1e0 %>%
+  left_join(
+    payoff_data_mean, 
+    by = c( "playerId")
+  )
+
+# Model alpha as a function of ( d_factor subscales and payoff, etc.)
+mod_alpha_mfrl2 <- lm( alpha ~ cal_scaled + dec_scaled + sad_scaled + vin_scaled + mean_payoff, data = results_features_MFRL_t1e0)
+summary(mod_alpha_mfrl2)
+
+
+# Model guilt 
+mod_guilt_mfrl2 <- lm( guilt ~ cal_scaled + dec_scaled + sad_scaled + vin_scaled + mean_payoff, data = results_features_MFRL_t1e0)
+summary(mod_guilt_mfrl2)
+```
+
 
 
 # Conclusion
