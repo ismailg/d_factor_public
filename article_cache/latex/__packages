@@ -39,5 +39,6 @@ grid
 gridExtra
 ggsignif
 magick
+patchwork
 broom.mixed
 lmerTest
