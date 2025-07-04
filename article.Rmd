@@ -1,10 +1,6 @@
 ---
 title: "The Price of Dark Traits: Strategic Exploitation and Its Limitations in Repeated Trust Games"
-author:
-  "Ismail Guennouni^1,2,3,4^*, Christoph Korn^4^, Georgia Koppe^1,2,3^"
-abstract: |
-  Trust and cooperation are fundamental to human social interaction, with personality traits significantly influencing economic decision-making. This study introduces a novel approach using adaptive computational agents to provide the first examination of how the Dark Factor of Personality (D-factor)—the unifying core of malevolent traits—affects trustworthiness and strategic exploitation in dynamic, repeated trust games. After pre-screening 1,243 participants, we selected individuals with high (N=91) and low (N=92) D-factor scores. Participants played two 25-round trust games as trustees against programmed Hidden Markov Model (HMM) investors derived from human data but differing in strategic reactivity: one 'human-like' HMM exhibited a characteristic 'sticky' mid-trust state (potentially vulnerable to exploitation), while a 'responsive' HMM reacted more decisively and immediately to trustee returns. Consistent with the D-factor concept, high-D participants returned lower proportions, particularly later in the interactions. Furthermore, high-D individuals demonstrated sophisticated strategic adaptation, significantly decreasing reciprocity over time only when receiving high investments from the more passively exploitable 'human-like' opponent. Crucially, this exploitative strategy proved self-limiting: high-D participants did not achieve higher total payoffs overall, as the 'responsive' HMM adaptively reduced investments. These findings uniquely demonstrate how D-factor manifests strategically in dynamic exchanges and reveal the critical role of opponent responsiveness in constraining exploitation, highlighting both the sophistication and the boundaries of dark personality expression in social interactions.
-  
+author: ""
 bibliography: "bib/DFP2.bib"
 date: "`r Sys.Date()`"
 output: 
@@ -15,28 +11,21 @@ output:
 header-includes:
   - \usepackage{pdflscape}
   - \usepackage{graphicx}
+  # --- Additions for line spacing and numbering ---
+  - \usepackage{setspace}   # Package for controlling line spacing
+  - \usepackage{lineno}     # Package for line numbers. 
+  - \doublespacing         # Sets document to double-spaced. Use \onehalfspacing for 1.5 spacing.
+  - \linenumbers           # Command to activate line numbering.
 ---
-\small
-
-^1^ *Department of Psychiatry and Psychotherapy, Central Institute of
-Mental Health, Medical Faculty Mannheim, Heidelberg University,
-Mannheim, Germany*
-
-^2^ *Interdisciplinary Center for Scientific Computing, Faculty of
-Mathematics and Computer Science, Heidelberg University, Heidelberg,
-Germany*
-
-^3^ *Hector Institute for AI in Psychiatry, Central Institute of Mental
-Health, Medical Faculty Mannheim, Heidelberg University, Mannheim
-Germany*
-
-^4^ *Department of General Psychiatry, Section Social Neuroscience,
-Heidelberg University, Germany*
 
 
-^\*^ *Corresponding author. Address: Central Institute of Mental Health,
-J5, Mannheim, Germany. Email:
-[ismail.guennouni\@zi-mannheim.de](mailto:ismail.guennouni@iwr.uni-heidelberg.de){.email}*
+**Abstract:**
+
+Trust and cooperation are fundamental to human social interaction, with personality traits significantly influencing economic decision-making. This study introduces a novel approach using adaptive computational agents to provide the first examination of how the Dark Factor of Personality (D-factor)—the unifying core of malevolent traits—affects trustworthiness and strategic exploitation in dynamic, repeated trust games. After pre-screening 1,243 participants, we selected individuals with high and low D-factor scores. Participants (N=183) played two 25-round trust games as trustees against programmed Hidden Markov Model (HMM) investors derived from human data but differing in strategic reactivity: one 'human-like' HMM exhibited a characteristic 'sticky' mid-trust state (potentially vulnerable to exploitation), while a 'responsive' HMM reacted more decisively and immediately to trustee returns. Consistent with the D-factor concept, high-D participants returned lower proportions, particularly later in the interactions. High-D individuals also demonstrated sophisticated strategic adaptation, significantly decreasing reciprocity over time only when receiving high investments from the more passively exploitable 'human-like' opponent. Crucially, this exploitative strategy proved self-limiting: high-D participants did not achieve higher total payoffs overall, as the 'responsive' HMM adaptively reduced investments. These findings uniquely demonstrate how D-factor manifests strategically in dynamic exchanges and reveal the critical role of opponent responsiveness in constraining exploitation, highlighting both the sophistication and the boundaries of dark personality expression in social interactions.
+
+\vspace{1cm}
+
+**Keywords** : Interpersonal functioning; Dark Factor of Personality; Strategic exploitation; Trust-based Cooperation; Hidden Markov Models
 
 
 
@@ -57,7 +46,7 @@ Trust and cooperation are fundamental to human social interaction and economic e
 
 While situational factors influence behavior, stable individual differences in personality traits are also significant predictors [@EvansRevelle2008; @MullerSchwieren2020]. Among the most potent predictors of antisocial or self-interested behavior are the "dark" personality traits. Although often studied via the Dark Triad framework (Machiavellianism, Narcissism, Psychopathy; @PaulhusWilliams2002), the considerable overlap between these traits [@Zettler2021] spurred the development of the Dark Factor of Personality (D-factor) [@Moshagen2018]. Proposed as the common core underlying various malevolent traits, D is defined as "the general tendency to maximize one's utility at the expense of others, accompanied by beliefs that serve as justifications" [@Moshagen2018]. This unifying construct, incorporating elements like Machiavellianism and Psychopathy previously linked to reduced trustworthiness [@Ibanez2016; @Gunnthorsdottir2002], offers a parsimonious framework for understanding antisocial tendencies by representing the shared variance among dark traits [@HilbigZettlerMoshagenThielmann2021; @Zettler2021].
 
-Research consistently links dark traits and D to reduced cooperation and honesty [@Zhao2015; @Thielmann2019], particularly in one-shot economic games like the dictator game [@Moshagen2020]. However, these single-interaction studies cannot capture the dynamics crucial to real-world exchanges, such as reputation formation [@Bohnet2004] and strategic adaptation over time. Understanding how D influences behavior in repeated exchanges is critical, especially given that the strategic manipulation inherent in D (e.g., its Machiavellian component; @Jones2009) may only fully manifest across multiple interactions. Yet, the specific impact of D in repeated trust games remains largely unexplored. Prior work using repeated games often involved different paradigms (e.g., sequential partners; @Gong2019) or focused on clinical samples and related constructs [@Rosenberger2019], leaving a gap in understanding how D operates strategically in sustained interactions within the general population.
+Research consistently links dark traits and D to reduced cooperation and honesty [@Zhao2015; @Thielmann2019], particularly in one-shot economic games like the dictator game [@Hilbig2021]. However, these single-interaction studies cannot capture the dynamics crucial to real-world exchanges, such as reputation formation [@Bohnet2004] and strategic adaptation over time. Understanding how D influences behavior in repeated exchanges is critical, especially given that the strategic manipulation inherent in D (e.g., its Machiavellian component; @Jones2009) may only fully manifest across multiple interactions. Yet, the specific impact of D in repeated trust games remains largely unexplored. Prior work using repeated games often involved different paradigms (e.g., sequential partners; @Gong2019) or focused on clinical samples and related constructs [@Rosenberger2019], leaving a gap in understanding how D operates strategically in sustained interactions within the general population.
 
 The present study aims to fill this gap by examining how D-factor influences strategic trustworthiness across 25 rounds of a repeated trust game. A key challenge in studying dynamic social interactions is controlling the behavior of the interaction partner. To address this, we employ an innovative methodology using Hidden Markov Model (HMM) agents as investors. HMMs [@Rabiner1989] are computational models ideal for capturing behavioral sequences driven by underlying states. Critically, our HMMs were not abstract models but were trained on large datasets of human behavior in prior trust games. This data-driven approach allows us to create standardized investors that exhibit realistic, human-like response patterns while enabling precise experimental manipulation of their interaction strategy – a blend of ecological validity and experimental control difficult to achieve otherwise [@MacyWiller2002].
 
@@ -257,7 +246,7 @@ plotInvVol <- plot_HMM_transitions(3, pars_inv_vol)
 
 <!-- Load preprocessed data -->
 ```{r}
-final_data <- read_csv("data/final_data.csv")
+final_data <- read_csv("data/anonymized_final_data.csv")
 
 num_participants <- length(unique(final_data$playerId))
 cat("Number of participants: ", num_participants)
@@ -308,15 +297,17 @@ final_data <- final_data %>%
 ```
 
 ```{r}
-demographics <- read.csv("data/demographic_data.csv")
-# demographics - contains demographic data with Participant.id, Age, Sex, etc.
-# final_data - contains other data with playerId column
+# Load the pre-processed and anonymized demographic data.
+# This file was generated by 'create_anonymized_data.R' in the private repo
+# and only contains data for the participants in the study.
+demographic_subset <- read_csv("data/anonymized_demographics.csv")
 
-# Extract demographic information for participants in final_data
-matching_participants <- demographics[demographics$Participant.id %in% final_data$id, ]
 
-# Select only the relevant columns we need
-demographic_subset <- matching_participants[, c("Participant.id", "Age", "Sex", "Country.of.birth", "Ethnicity.simplified")]
+# # Extract demographic information for participants in final_data
+# matching_participants <- demographics[demographics$Participant.id %in% final_data$id, ]
+# 
+# # Select only the relevant columns we need
+# demographic_subset <- matching_participants[, c("Participant.id", "Age", "Sex", "Country.of.birth", "Ethnicity.simplified")]
 
 # Calculate gender proportions
 gender_counts <- table(demographic_subset$Sex)
@@ -352,20 +343,17 @@ A sample size of 180 participants was determined *a priori* through conducting a
 ## Design and Materials
 
 The experiment employed a 2 (HMM Type: Human-like vs. Responsive) × 2 (D-Factor: High vs. Low) mixed design, with HMM Type as a within-subjects factor. Participants completed two phases, each involving a 25-round Repeated Trust Game (RTG), against either the Human-like or Responsive HMM investor, with the order counterbalanced. 
-The experimental interface was designed and implemented online using Empirica v1 [@Almaatouq2021], with an estimated completion time of 30 minutes per participant. The study received approval from the University of Heidelberg's Medical Faculty ethics commission (ID:S-708/2023) and the experiment was performed in accordance with the ethics board guidelines and regulations. All participants provided informed consent prior to their participation. 
+The experimental interface was designed and implemented online using Empirica v1 [@Almaatouq2021], with an estimated completion time of 30 minutes per participant. The study received approval from the University of [Redacted] Medical Faculty ethics commission (ID:S-708/2023) and the experiment was performed in accordance with the ethics board guidelines and regulations. All participants provided informed consent prior to their participation. 
 
 ### Repeated Trust Game (RTG)
 Based on @Berg1995, participants always acted as the trustee. In each round, the HMM investor received 20 units and decided how much (0-20) to invest. This investment was tripled, and the trustee decided how much of the tripled amount to return to the investor. Trustees knew that returning more than one-third resulted in a gain for the investor. Participants chose a representative icon; the opponent's icon changed between phases to simulate a new partner. To enhance realism, participants were not told opponents were computerised; simulated pairing delays and variable response latencies (5-10s) were included.
-
-### HMM Investor Construction
-Computerised investors were implemented as Hidden Markov Models (HMMs) trained on an independent dataset of 388 10-round RTGs (see Supplement for details). This data-driven approach aimed to create investors mimicking human interaction patterns. The inferred HMM used three latent states ("low-trust", "medium-trust", "high-trust"), each associated with a learned probability distribution over possible investments (0-20 units; Figure \@ref(fig:combinedPlots).B). Transitions between states were probabilistic, modeled as a function of the investor's net return (amount returned - amount invested) in the previous round (Figure \@ref(fig:combinedPlots).C). For instance, higher net returns increased the probability of transitioning to higher trust states. The HMM started each 25-round game in the "medium-trust" state. Investor actions involved sampling an investment from the current state's distribution; the state for the next round was determined by sampling from the transition probabilities based on the previous round's net return. (See Supplement for full HMM specification).
 
 
 ```{r}
 # Identify ethnic distribution and country of birth from demographics data
 
 # Calculate ethnicity distribution
-ethnicity_counts <- table(demographic_subset$Ethnicity.simplified)
+ethnicity_counts <- table(demographic_subset$`Ethnicity simplified`)
 ethnicity_percentages <- prop.table(ethnicity_counts) * 100
 
 # Print ethnicity results
@@ -375,7 +363,7 @@ print(paste0("Proportion of White participants: ", round(ethnicity_percentages["
 
 # Assuming there's a column named "Country.of.birth" or similar in your data
 # If the column has a different name, replace it accordingly
-country_counts <- table(demographic_subset$Country.of.birth)
+country_counts <- table(demographic_subset$`Country of birth`)
 country_percentages <- prop.table(country_counts) * 100
 
 # Sort countries by frequency in descending order
@@ -405,11 +393,11 @@ library(tidyr) # For pivot_wider and unnest
 
 # Get unique participant IDs and their d_level from final_data
 participant_d_levels <- final_data %>%
-  distinct(id, d_level) # Ensure this pulls rows with "low_D" and "high_D"
+  distinct(playerId, d_level) # Ensure this pulls rows with "low_D" and "high_D"
 
 # Merge with demographic subset and perform conversions
 demographics_with_dlevel <- participant_d_levels %>%
-  inner_join(demographic_subset, by = c("id" = "Participant.id")) %>%
+  inner_join(demographic_subset, by = c("playerId")) %>%
   mutate(
     # *** ADD THIS LINE TO CONVERT Age TO NUMERIC ***
     Age = as.numeric(as.character(Age)), # Convert Age to numeric type
@@ -419,7 +407,7 @@ demographics_with_dlevel <- participant_d_levels %>%
 
     # Convert other categorical variables to factors
     Sex = factor(Sex),
-    Ethnicity.simplified = factor(Ethnicity.simplified)
+    Ethnicity.simplified = factor(`Ethnicity simplified`)
   ) %>%
   # IMPORTANT: Filter out any rows where d_level became NA
   filter(!is.na(d_level)) %>%
@@ -482,104 +470,6 @@ age_row <- data.frame(
   P_value = age_p_value
 )
 
-# --- 3. Categorical Variable Summary & Test (Function) ---
-summarize_categorical <- function(data, variable_name, characteristic_label) {
-  var_sym <- sym(variable_name)
-
-  # Calculate N and Percent per group
-  summary_stats <- data %>%
-    # Ensure factor levels are respected even if count is 0 for a group
-    count(d_level, {{ var_sym }}, .drop = FALSE) %>%
-    group_by(d_level) %>%
-    # Avoid division by zero for percentages
-    mutate(
-        total_n = sum(n),
-        prop = ifelse(total_n == 0, 0, n / total_n)
-      ) %>%
-    ungroup() %>%
-    mutate(summary_str = sprintf("%d (%.1f%%)", n, prop * 100)) %>%
-    dplyr::select(d_level, {{ var_sym }}, summary_str) %>%
-    pivot_wider(names_from = d_level, values_from = summary_str, values_fill = "0 (0.0%)")
-
-  # Perform test (Chi-squared or Fisher's Exact)
-  p_value_str <- NA_character_
-  # Only run test if both groups have data
-  if (n_low > 0 && n_high > 0) {
-      tryCatch({
-          # Ensure table has both dimensions > 0 before testing
-          cont_table <- table(data$d_level, data[[variable_name]])
-          if(all(dim(cont_table) > 0)) {
-              expected_counts <- suppressWarnings(chisq.test(cont_table)$expected)
-              if (any(expected_counts < 5, na.rm = TRUE) && nrow(cont_table) <= 2 && ncol(cont_table) <= 2) {
-                  test_result <- fisher.test(cont_table)
-              } else {
-                  test_result <- suppressWarnings(chisq.test(cont_table, simulate.p.value = any(expected_counts < 5, na.rm = TRUE)))
-              }
-              p_value_str <- format_p(test_result$p.value)
-          }
-      }, error = function(e) { cat(variable_name, "test failed:", conditionMessage(e), "\n") })
-  }
-
-  # Prepare rows for the final table
-  header_row <- data.frame(
-    Characteristic = sprintf("%s, n (%%)", characteristic_label),
-    Low = "",
-    High = "",
-    P_value = p_value_str
-  )
-
-  # *** CORRECTION HERE: Select/Rename pivoted columns with backticks ***
-  level_rows <- summary_stats %>%
-    mutate(Characteristic = paste0("  ", !!var_sym)) %>%
-    # Ensure columns exist before selecting
-    dplyr::select(Characteristic, any_of(c("low_D", "high_D"))) %>%
-    # Rename using backticks for source columns
-    rename(Low = `low_D`, High = `high_D`) %>%
-    mutate(P_value = "")
-
-  return(bind_rows(header_row, level_rows))
-}
-
-# --- 4. Apply to Sex and Ethnicity ---
-# Ensure Sex and Ethnicity levels don't contain issues like "CONSENT_REVOKED"
-# Add filtering here if needed, e.g.:
-# demographics_for_table <- demographics_with_dlevel %>%
-#    filter(!Sex %in% c("CONSENT_REVOKED"), !Ethnicity.simplified %in% c("CONSENT_REVOKED"))
-# sex_rows <- summarize_categorical(demographics_for_table, "Sex", "Gender")
-# ethnicity_rows <- summarize_categorical(demographics_for_table, "Ethnicity.simplified", "Ethnicity")
-
-# Using original data for now, assuming levels are clean:
-sex_rows <- summarize_categorical(demographics_with_dlevel, "Sex", "Gender")
-ethnicity_rows <- summarize_categorical(demographics_with_dlevel, "Ethnicity.simplified", "Ethnicity")
-
-
-# --- 5. Assemble Final Table ---
-final_table <- bind_rows(
-  age_row,
-  sex_rows,
-  ethnicity_rows
-)
-
-# *** CORRECTION HERE: Update column names using correct N values ***
-colnames(final_table) <- c(
-  "Characteristic",
-  sprintf("Low D (N=%d)", n_low),
-  sprintf("High D (N=%d)", n_high),
-  "P-value"
-)
-
-# --- 6. Display Table ---
-print(final_table, row.names = FALSE)
-
-# Optional: Use knitr::kable for better formatting
-# if (requireNamespace("knitr", quietly = TRUE)) {
-#   print(knitr::kable(final_table, format = "pipe"))
-# }
-# 
-# cat("\nNotes:\n")
-# cat("- Age presented as Mean (SD); compared using t-test (check assumptions).\n")
-# cat("- Categorical variables presented as n (%); compared using Chi-squared or Fisher's Exact test.\n")
-# cat("- P-values < 0.001 are shown as '<0.001'.\n")
 ```
 
 ```{r}
@@ -726,12 +616,13 @@ cat("- P-values < 0.001 are shown as '<0.001'.\n")
 
 
 
+
 The mean age of participants was $33.1$ years, with an $9.7$-year standard deviation. The majority of participants identified ethnically as White ($57$\%). The online cohort registered $38$ unique countries of birth with the most frequent being South Africa ($24$\%), the U.K. ($20$\%) followed by Poland ($5$\%) and Greece ($4$\%). Participants were paid a fixed fee of £4 plus a bonus payment dependent on their performance that averaged £$0.5$. We collected data over multiple sessions between October and November 2024.
 
 
 
 
-```{r combinedPlots,include=F, out.width='1\\linewidth', out.height='1\\textheight', fig.align='center'}
+```{r combinedPlots,include=F}
 # Ensure necessary packages are loaded
 library(ggplot2)
 library(patchwork)
@@ -805,11 +696,14 @@ ggsave("plots/figure1.pdf", final_plot, width = 12, height = 7, dpi = 300)
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\linewidth]{plots/figure1.pdf}
-\caption{\small{Panel A: A timeline of the experiment. The RTG is played in dyads, with participants always assigned the role of the trustee and the HMM agent that of the investor. The investor is endowed with 20 units at the start of each round. They need to decide how much of that endowment they want to invest with the trustee. The investment is then multiplied by a factor of 3 and sent to the trustee who needs to decide how much of the multiplied investment they want to send back to the investor. The difference between phases is the type of agents participants are facing. Panels B - C: We construct the artificial investor agent by fitting a three-state HMM to data of human investors engaged in the 10 round RTG. From the fitted HMM, we get the distribution of investments by the human-like agent, conditional on its latent state as shown in Panel B. The fitted HMM also yields the transition probability of the agent to a state on trial t+1 as a function of the net return (difference between the investment sent and the amount received in return) on trial t as shown in Panel C. Each plot in Panel C represents a different starting latent state on trial t, and each line represents the probability of transitioning to a particular state in trial t+1. Panel D shows the transition probabilities of the Responsive HMM agent. Unlike the Human-like HMM, the Responsive HMM is much more likely to transition out of the mid-trust state. Transitions in the medium and high trust states were identical for both agents.}}
+\caption{\small{Panel A: A timeline of the experiment. The RTG is played in dyads, with participants always assigned the role of the trustee and the HMM agent that of the investor. The investor is endowed with 20 units at the start of each round. They need to decide how much of that endowment they want to invest with the trustee. The investment is then multiplied by a factor of 3 and sent to the trustee who needs to decide how much of the multiplied investment they want to send back to the investor. The difference between phases is the type of agents participants are facing. Panels B - C: We construct the artificial investor agent by fitting a three-state HMM to data of human investors engaged in the 10 round RTG. From the fitted HMM, we get the distribution of investments by the human-like agent, conditional on its latent state as shown in Panel B. The fitted HMM also yields the transition probability of the agent to a state on trial t+1 as a function of the net return (difference between the investment sent and the amount received in return) on trial t as shown in Panel C. Each plot in Panel C represents a different starting latent state on trial t, and each line represents the probability of transitioning to a particular state in trial t+1.  The responsive HMM agent (Panel D) is much more likely to transition out of the mid-trust state. Transitions in the medium and high trust states were identical for both agents.}}
 \label{fig:combinedPlots}
 \end{figure}
 \end{landscape}
 
+
+### HMM Investor Construction
+Computerised investors were implemented as Hidden Markov Models (HMMs) trained on an independent dataset of 388 10-round RTGs (see Supplement for details). This data-driven approach aimed to create investors mimicking human interaction patterns. The inferred HMM used three latent states ("low-trust", "medium-trust", "high-trust"), each associated with a learned probability distribution over possible investments (0-20 units; Figure \@ref(fig:combinedPlots).B). Transitions between states were probabilistic, modeled as a function of the investor's net return (amount returned - amount invested) in the previous round (Figure \@ref(fig:combinedPlots).C). For instance, higher net returns increased the probability of transitioning to higher trust states. The HMM started each 25-round game in the "medium-trust" state. Investor actions involved sampling an investment from the current state's distribution; the state for the next round was determined by sampling from the transition probabilities based on the previous round's net return. (See Supplement for full HMM specification).
 
 
 ### HMM Investor Types 
@@ -844,7 +738,8 @@ Participants' perceptions (ratings of cooperativeness, trustworthiness, willingn
 
 To examine temporal dynamics within the game, the main interaction period (rounds 1-24) was divided into three equal, consecutive periods: early (rounds 1-8), middle (rounds 9-16), and late (rounds 17-24), representing the beginning, middle, and end of the game, respectively. Analyses compared key variables between groups across these periods. For the final round of each game, where no future interactions were anticipated (resembling a one-shot dictator game), we compared absolute returns and percentage returns between High-D and Low-D groups using both Welch's t-tests and non-parametric Wilcoxon rank-sum tests. The latter was included given the smaller sample size for this single-round comparison and to ensure robustness of our findings regardless of distributional assumptions. Finally, we analysed total payoffs earned by participants to determine whether behavioral differences resulted in differing economic outcomes. For debrief questions, we calculated the percentage of participants who believed they played against human opponents or were uncertain about their opponent's nature, providing insight into the ecological validity of our HMM agents. Full model specifications and additional analytical details are provided in the supplement.
 
-
+## Data, Materials, and Code Availability
+The data and analysis code that support the findings of this study are available at a public GitHub repository. The repository contains all materials needed to reproduce the analyses, including anonymized data, code (in R), and a README file. To maintain anonymity during the peer-review process, the link will be provided upon acceptance or can be shared upon request to the editorial office.
 
 
 # Results
@@ -1088,10 +983,10 @@ print(t_test_results)
 On average, investments and returns fell within the documented range of 40-60% of the endowment for investments and 35-50% of the total yield for returns, as reported in previous studies [@Charness2008; @Fiedler2011].
 
 
-Comparing High-D versus Low-D participants across all rounds, we observed several behavioral differences. Low-D participants received lower investments (`r papaja::apa_print(t_test_investment)$statistic`) and consistently returned less money to investors (`r papaja::apa_print(t_test_return)$statistic`). The difference in return percentage was statistically significant (`r papaja::apa_print(t_test_return_pct)$statistic`), with High-D participants returning approximately 2-4 percentage points less of the tripled investment. 
+Comparing High-D versus Low-D participants across all rounds, we observed several behavioral differences. High-D participants received lower investments (`r papaja::apa_print(t_test_investment)$statistic`) and consistently returned less money to investors (`r papaja::apa_print(t_test_return)$statistic`). The difference in return percentage was statistically significant (`r papaja::apa_print(t_test_return_pct)$statistic`), with High-D participants returning approximately 2-4 percentage points less of the tripled investment. 
 
 
-We then specifically examined differences in trust game behavior between the two groups (High-D and Low-D) across three game periods: early (rounds 1-8), mid (rounds 9-16), and late (rounds 17+ excluding the last round). We compared HMM investments, absolute returns, and percentage returns between the two groups using Welch's t-tests. We excluded the last round and analysed that data separately as participants were told it was the last interaction in that round. 
+To examine how trust behavior evolved over time, we divided the 25-round game into three approximately equal periods—early (rounds 1–8), mid (rounds 9–16), and late (rounds 17–24). This tripartite split allows us to track temporal dynamics while ensuring each period contains a similar number of rounds. The final round (round 25) was excluded due to endgame effects that could distort typical behavior. We compared HMM investments, absolute returns, and percentage returns between the two groups using Welch's t-tests. We excluded the last round and analysed that data separately as participants were told it was the last interaction in that round. 
 
 As shown in Figure \@ref(fig:gamesPlot2), whilst there were no significant difference in investment received and percentage returns sent by the participants between High-D and Low-D groups during early and mid periods, significant differences emerged for all three measures during the late period. The HMM invested significantly *less* in High-D participants than Low-D participants (`r sprintf("t(%1.2f) = %1.2f, p = %1.3e", t_test_results$late$investment$parameter, t_test_results$late$investment$statistic, t_test_results$late$investment$p.value)`). Furthermore, High-D participants sent back significantly lower absolute returns (`r sprintf("t(%1.2f) = %1.2f, p = %1.3e", t_test_results$late$return$parameter, t_test_results$late$return$statistic, t_test_results$late$return$p.value)`) and lower percentage returns (`r sprintf("t(%1.2f) = %1.2f, p = %1.3e", t_test_results$late$pct_return$parameter, t_test_results$late$pct_return$statistic, t_test_results$late$pct_return$p.value)`) compared to Low-D participants.
 
@@ -1153,23 +1048,63 @@ pdf_theme <- theme_bw() +
   )
 
 # 1. Investment plot
+# p1 <- ggplot(plot_data, aes(x = game_period, y = mean_investment, 
+#                            group = d_level, color = d_level, shape = d_level)) +
+#   geom_line(linewidth = 0.7) +
+#   geom_point(size = 2) +
+#   geom_errorbar(aes(ymin = mean_investment - se_investment, 
+#                    ymax = mean_investment + se_investment), 
+#                width = 0.15, linewidth = 0.4) +
+#   # Add significance markers only where significant
+#   geom_text(data = filter(sig_data, measure == "investment"), 
+#            aes(x = game_period, y = y_pos, label = sig),
+#            inherit.aes = FALSE,
+#            size = 2.5, vjust = -0.5) +
+#   scale_x_discrete(labels = period_labels) +
+#   scale_color_manual(values = c("high_D" = high_d_color, "low_D" = low_d_color),
+#                     labels = c("high_D" = "Low-D", "low_D" = "Low-D")) +
+#   scale_shape_manual(values = c("high_D" = 17, "low_D" = 16),
+#                     labels = c("high_D" = "Low-D", "low_D" = "Low-D")) +
+#   # Set y limits to provide room for significance markers
+#   ylim(9.4, 11.7) +
+#   labs(
+#     title = "A. HMM Investment",
+#     subtitle = "Amount invested by HMM agent",
+#     y = "Mean Investment (points)",
+#     x = NULL
+#   ) +
+#   # Add legend to top panel
+#   theme(legend.position = c(0.8, 0.85),
+#         legend.background = element_rect(fill = "white", linewidth = 0.2, color = "gray80"),
+#         legend.title = element_blank(),
+#         legend.text = element_text(size = 6),
+#         legend.key.size = unit(0.5, "lines"),
+#         legend.margin = margin(1, 1, 1, 1)) +
+#   pdf_theme
+
+# 1. Investment plot
 p1 <- ggplot(plot_data, aes(x = game_period, y = mean_investment, 
-                           group = d_level, color = d_level, shape = d_level)) +
+                            group = d_level, color = d_level, shape = d_level)) +
   geom_line(linewidth = 0.7) +
   geom_point(size = 2) +
   geom_errorbar(aes(ymin = mean_investment - se_investment, 
-                   ymax = mean_investment + se_investment), 
-               width = 0.15, linewidth = 0.4) +
+                    ymax = mean_investment + se_investment), 
+                width = 0.15, linewidth = 0.4) +
   # Add significance markers only where significant
   geom_text(data = filter(sig_data, measure == "investment"), 
-           aes(x = game_period, y = y_pos, label = sig),
-           inherit.aes = FALSE,
-           size = 2.5, vjust = -0.5) +
+            aes(x = game_period, y = y_pos, label = sig),
+            inherit.aes = FALSE,
+            size = 2.5, vjust = -0.5) +
   scale_x_discrete(labels = period_labels) +
-  scale_color_manual(values = c("high_D" = high_d_color, "low_D" = low_d_color),
-                    labels = c("high_D" = "Low-D", "low_D" = "Low-D")) +
-  scale_shape_manual(values = c("high_D" = 17, "low_D" = 16),
-                    labels = c("high_D" = "Low-D", "low_D" = "Low-D")) +
+  
+  # Corrected scales with proper labels and a shared name to ensure legends merge
+  scale_color_manual(name = "Condition",
+                     values = c("high_D" = high_d_color, "low_D" = low_d_color),
+                     labels = c("high_D" = "High-D", "low_D" = "Low-D")) + # Corrected label
+  scale_shape_manual(name = "Condition",
+                     values = c("high_D" = 17, "low_D" = 16),
+                     labels = c("high_D" = "High-D", "low_D" = "Low-D")) + # Corrected label
+  
   # Set y limits to provide room for significance markers
   ylim(9.4, 11.7) +
   labs(
@@ -1178,14 +1113,17 @@ p1 <- ggplot(plot_data, aes(x = game_period, y = mean_investment,
     y = "Mean Investment (points)",
     x = NULL
   ) +
-  # Add legend to top panel
-  theme(legend.position = c(0.8, 0.85),
-        legend.background = element_rect(fill = "white", linewidth = 0.2, color = "gray80"),
-        legend.title = element_blank(),
-        legend.text = element_text(size = 6),
-        legend.key.size = unit(0.5, "lines"),
-        legend.margin = margin(1, 1, 1, 1)) +
-  pdf_theme
+  # Apply base theme FIRST
+  pdf_theme + 
+  # THEN, override the legend position for this specific plot
+  theme(
+    legend.position = c(0.2, 0.85),
+    legend.background = element_rect(fill = "white", linewidth = 0.2, color = "gray80"),
+    legend.title = element_blank(), # Hides the legend title ("Condition")
+    legend.text = element_text(size = 6),
+    legend.key.size = unit(0.5, "lines"),
+    legend.margin = margin(1, 1, 1, 1)
+  )
 
 # 2. Return plot
 p2 <- ggplot(plot_data, aes(x = game_period, y = mean_return, 
@@ -1260,7 +1198,7 @@ combined_plot <- plot_grid(
 ```
 
 
-```{r gamesPlot2, include=T, echo=FALSE, warning =FALSE, fig.width=6, fig.height=8, out.width='0.9\\linewidth', fig.cap="Investment and return patterns across game periods by D-factor level. (A) Mean investments from HMM agents decrease for High-D participants in late game periods. (B) Absolute returns similarly decrease for High-D participants. (C) Return percentages show High-D participants consistently return a smaller proportion of received investments, with the difference becoming significant in later periods. Error bars represent standard errors of the mean. This pattern demonstrates how High-D participants' decreasing reciprocity triggers defensive responses from HMM agents."}
+```{r gamesPlot2, include=T, echo=FALSE, warning =FALSE, fig.width=6, fig.height=8, out.width='0.9\\linewidth', fig.cap="Investment and return patterns across both HMM types and over the 3 game periods by D-factor level. (A) Mean investments from HMM agents decrease for High-D participants in late game periods. (B) Absolute returns similarly decrease for High-D participants. (C) Return percentages show High-D participants consistently return a smaller proportion of received investments, with the difference becoming significant in later periods. Error bars represent standard errors of the mean. This pattern demonstrates how High-D participants' decreasing reciprocity triggers defensive responses from HMM agents."}
 
 # Return the plot
 combined_plot
@@ -1468,6 +1406,9 @@ mod_return_pct <- afex::mixed(ret_pct_na ~ opponent.f*inv_scaled*d_level*volatil
       method = "KR")
 
 anova(mod_return_pct)
+
+# Save the model object to a file
+saveRDS(mod_return_pct, file = "data/mod_return_pct.RDS")
 
 ```
 
@@ -2638,7 +2579,7 @@ Interestingly, the timing of these differences suggests a strategic component to
 
 The significant interaction between D-factor, investment amount, round number, and opponent type reveals sophisticated strategic differences between High and Low-D individuals. When facing the predictable Human-like HMM opponent, High-D participants demonstrated a distinct pattern: they significantly decreased their returns over time for high-investment trials while maintaining relatively stable returns for low-investment trials. This selective exploitation strategy suggests a calculated approach to maximize gains while minimizing the risk of triggering retaliation from the investor.
 This pattern is particularly significant because it represents a form of Machiavellian exploitation that targets situations of high trust (indicated by higher investments) rather than indiscriminate exploitation across all conditions. By selectively reducing reciprocity in high-stake interactions, High-D individuals effectively exploit the trust placed in them when the potential gains are greatest. This finding aligns with the conceptualization of Machiavellianism as involving strategic, long-term orientation to personal gain [@Jones2009] and supports previous research indicating that dark personality traits are associated with strategic rather than impulsive exploitation [@Gunnthorsdottir2002].
-Notably, this strategic exploitation pattern was only observed with the more predictable Human-like HMM opponent, not with the Responsive opponent. This distinction suggests that High-D individuals may be particularly adept at identifying and exploiting predictable social dynamics, while showing more caution in Responsive or unpredictable social environments. This contextual sensitivity adds important nuance to our understanding of how dark personality traits manifest in economic decisions.
+Notably, this strategic exploitation pattern was only observed with the more predictable Human-like HMM opponent, not with the Responsive opponent. This distinction suggests that High-D individuals may be particularly adept at identifying and exploiting predictable social dynamics, while showing more caution in Responsive or unpredictable social environments. This contextual sensitivity adds important nuance to our understanding of how dark personality traits manifest in economic decisions. An alternative, though not mutually exclusive, explanation could be that High-D individuals do not necessarily possess more sophisticated social intelligence, but rather a different learning model. For instance, they may be faster to abandon pro-social norms when they detect environmental predictability, a possibility that could be tested in future work by modeling individual learning rates. This distinction is important, as it reframes the behavior from one of pure strategic superiority to one of differential adaptation to social cues.
 
 
 The significant four-way interaction involving investment, order of opponent presentation, D-factor, and round number further shows the adaptive nature of exploitation strategies. High-D participants who first encountered the stable (human-like) opponent showed decreasing returns over rounds for high and medium investments but maintained stable returns for low investments. In contrast, those who initially faced the Responsive opponent reduced returns for low and medium investments while maintaining returns for high investments.
@@ -2652,7 +2593,7 @@ These findings extend beyond economic behavior to suggest that the D-factor infl
 
 
 The analysis of final-round behavior, where participants knew there would be no further interactions, provides insight into purely self-interested tendencies without the strategic considerations of reputation building. In these last rounds, High-D participants returned significantly lower amounts than Low-D participants, both in absolute terms and as a percentage of investment. This finding represents a clear manifestation of the maximizing self-interest component of the D-factor when strategic constraints are removed.
-The last-round effect essentially transforms the trust game into a dictator game, where participants can freely decide how much to return without fear of future consequences. The significant D-factor difference in this context aligns with previous research showing associations between the D-factor and selfish behavior in dictator games [@Moshagen2020]. The consistency across economic paradigms strengthens the conclusion that the D-factor represents a stable tendency toward self-maximization when social constraints are minimal.
+The last-round effect essentially transforms the trust game into a dictator game, where participants can freely decide how much to return without fear of future consequences. The significant D-factor difference in this context aligns with previous research showing associations between the D-factor and selfish behavior in dictator games [@Hilbig2021]. The consistency across economic paradigms strengthens the conclusion that the D-factor represents a stable tendency toward self-maximization when social constraints are minimal.
 
 A particularly interesting finding was that despite returning lower percentages, High-D participants did not achieve significantly higher total payoffs compared to Low-D participants. This seemingly paradoxical result can be explained by the adaptive nature of the HMM opponent, which reduced investments in response to lower returns from High-D participants. This dynamic illustrates how exploitative strategies may fail to maximize long-term gains in environments with responsive counterparts, as initial exploitation triggers defensive reactions that ultimately limit future opportunities for gain.
 This outcome has important implications for understanding the evolutionary stability of dark personality traits. While the D-factor may confer advantages in certain one-shot interactions or where reputation effects are minimal, its effectiveness as a long-term strategy in repeated interactions with responsive partners appears limited. This aligns with theoretical accounts suggesting that dark personality traits may represent frequency-dependent strategies that are most beneficial when rare in a population [@Mealey1995], as widespread exploitation would trigger universal defensive responses that limit its effectiveness.
@@ -2664,9 +2605,9 @@ Third, the interaction between D-factor and opponent volatility provides insight
 Finally, our findings have practical implications for promoting cooperation in economic exchanges. The fact that High-D participants received lower investments over time indicates that exploitative strategies trigger defensive responses that ultimately limit opportunities for mutual gain. Interventions that highlight these long-term consequences might help redirect self-interested motivations toward more sustainable cooperative strategies.
 
 ## Limitations and future directions
-Several limitations of the current study suggest directions for future research. First, while we observed clear behavioral differences between high and Low-D individuals, our design cannot determine which specific aspects of the D-factor (e.g., Machiavellianism, psychopathy, or narcissism) drive these effects. Future studies could include measures of these specific traits alongside the D-factor to examine their relative contributions.
+Several limitations of the current study suggest directions for future research. First, while we observed clear behavioral differences between high and Low-D individuals, our design cannot determine which specific aspects of the D-factor (e.g., Machiavellianism, psychopathy, or narcissism) drive these effects. Future studies could include measures of these specific traits alongside the D-factor to examine their relative contributions, and potentially explore whether we can replciate these results when including participants with the whole range of D-scores. 
 Second, our use of HMM opponents provided excellent experimental control but may limit ecological validity. Future research could examine D-factor influences in fully human interactions to capture the richer social dynamics of real-world trust building.
-Finally, while we found significant differences in behavior and perception, we did not explore the underlying affective or cognitive processes that mediate these effects. Future studies could incorporate measures of empathy, moral disengagement, or social value orientation to understand how dark personality traits influence the subjective experience of economic exchanges.
+Finally, while we found significant differences in behavior and perception, we did not explore the underlying affective or cognitive processes that mediate these effects. Future studies could incorporate measures of empathy, moral disengagement, or social value orientation to understand how dark personality traits influence the subjective experience of economic exchanges. Furthermore, our participant sample, while diverse in country of origin, was recruited through an online platform and consisted primarily of individuals from Western countries. Future research should aim to replicate these findings in different cultural and socio-economic contexts to establish the broader generalizability of the D-factor's influence on strategic social behavior
 
 # Conclusion
 This study provides novel insights into how the Dark Factor of Personality influences behavior in repeated trust games. Our findings demonstrate that individuals with High-D scores exhibit systematic patterns of lower reciprocity that emerge most strongly in later rounds of interaction, particularly when facing predictable opponents and receiving high investments. These behavioral differences are accompanied by more negative perceptions of interaction partners, suggesting a comprehensive influence of dark personality traits on both social cognition and economic decision-making.
@@ -2674,5 +2615,7 @@ The sophistication of exploitation strategies—adapting to opponent type, inves
 These findings bridge the gap between personality psychology and behavioral economics, demonstrating how stable personality traits manifest in dynamic economic exchanges. They extend previous research on dark personality traits by revealing how exploitation unfolds over time and varies across contexts. Future research should continue to explore the cognitive and affective mechanisms underlying these behavioral patterns and examine how interventions might promote cooperation even among individuals with stronger exploitative tendencies.
 Understanding the relationship between the D-factor and trustworthiness has significant implications for promoting cooperative outcomes in economic and social interactions. By recognizing how dark personality traits influence trust dynamics, we can develop more effective strategies for fostering cooperation and limiting the social costs of exploitation.
 
+
+\pagebreak
 
 # References
