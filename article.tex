@@ -164,7 +164,9 @@ Based on the theoretical conceptualization of D and the dynamics of repeated gam
 
 \subsection{Participants}\label{participants}
 
-To obtain groups with distinct D-factor levels, 1,243 participants were pre-screened via Prolific Academic (prolific.co) using the 16-item Dark Factor of Personality Questionnaire (D16). Two groups were selected for the main experiment: High-D (90th percentile or higher, D score \textgreater{} 42, N=91) and Low-D (10th percentile or lower, score \textless{} 22, N=92), totaling 183 participants (44\% female). These were then invited through Prolific to take part in the main experiment.
+To form groups with distinct levels of the Dark Factor of Personality (D), 1,243 participants were pre‑screened via the Prolific Academic platform (prolific.co) using the Dark Factor of Personality--16 (D16) -- a concise 16‑item unidimensional measure of the general D trait (range 16--80).
+Based on the scale developers' validation sample (\(N = 6{,}838\)), the D16 demonstrated strong internal consistency (Cronbach's \(\alpha = .91\)) and excellent test--retest reliability (\(r = .90\)), with confirmatory factor analyses supporting its single-factor structure (Moshagen, Zettler, and Hilbig 2020).
+We selected two groups: High-D (90th percentile or higher, total score \(> 42\), \(N = 91\)) and Low-D (10th percentile or lower, total score \(< 22\), \(N = 92\)), yielding a final sample of 183 participants (\(44\%\) female). These participants were then invited via Prolific to complete the main experiment.
 
 A sample size of 180 participants was determined \emph{a priori} through conducting a power analysis using Monte Carlo simulations with the \emph{simr} package in R. The analysis specifically targeted the three-way interaction between d-score, opponent type (Human-like vs.~Responsive), and investment level. Parameters for the simulation were based on previous studies, with an expected effect size of \(-0.1\) (correlation between d-score and returns, see Thielmann, Spadaro, and Balliet (2020)), alpha level of \(0.05\), and desired power of \(0.90\). Starting with 50 participants, we iteratively generated synthetic data for a task with \(25\) rounds per condition and fitted linear mixed-effects models with random intercepts for participants. The simulations incorporated realistic parameter estimates and fixed effects derived from previous research using the same paradigm. This analysis indicated that a sample of 180 participants would provide at least \(90\%\) power to detect the hypothesized three-way interaction.
 
@@ -377,7 +379,7 @@ Finally, our findings have practical implications for promoting cooperation in e
 
 \subsection{Limitations and future directions}\label{limitations-and-future-directions}
 
-Several limitations of the current study suggest directions for future research. First, while we observed clear behavioral differences between high and Low-D individuals, our design cannot determine which specific aspects of the D-factor (e.g., Machiavellianism, psychopathy, or narcissism) drive these effects. Future studies could include measures of these specific traits alongside the D-factor to examine their relative contributions, and potentially explore whether we can replciate these results when including participants with the whole range of D-scores.
+Several limitations of the current study suggest directions for future research. First, while we observed clear behavioral differences between high and Low-D individuals, our design cannot determine which specific aspects of the D-factor (e.g., Machiavellianism, psychopathy, or narcissism) drive these effects. Future studies could include measures of these specific traits alongside the D-factor to examine their relative contributions, and potentially explore whether we can replicate these results when including participants with the whole range of D-scores.
 Second, our use of HMM opponents provided excellent experimental control but may limit ecological validity. Future research could examine D-factor influences in fully human interactions to capture the richer social dynamics of real-world trust building.
 Finally, while we found significant differences in behavior and perception, we did not explore the underlying affective or cognitive processes that mediate these effects. Future studies could incorporate measures of empathy, moral disengagement, or social value orientation to understand how dark personality traits influence the subjective experience of economic exchanges. Furthermore, our participant sample, while diverse in country of origin, was recruited through an online platform and consisted primarily of individuals from Western countries. Future research should aim to replicate these findings in different cultural and socio-economic contexts to establish the broader generalizability of the D-factor's influence on strategic social behavior
 
@@ -448,6 +450,9 @@ Mealey, Linda. 1995. {``The Sociobiology of Sociopathy: {An} Integrated Evolutio
 
 \bibitem[\citeproctext]{ref-Moshagen2018}
 Moshagen, Morten, Benjamin E. Hilbig, and Ingo Zettler. 2018. {``The Dark Core of Personality.''} \emph{Psychological Review} 125 (5): 656--88. \url{https://doi.org/10.1037/rev0000111}.
+
+\bibitem[\citeproctext]{ref-MoshagenZettlerHilbig2020Assessment}
+Moshagen, Morten, Ingo Zettler, and Benjamin E. Hilbig. 2020. {``Measuring the Dark Core of Personality.''} \emph{Psychological Assessment} 32 (2): 182--96. \url{https://doi.org/10.1037/pas0000778}.
 
 \bibitem[\citeproctext]{ref-MullerSchwieren2020}
 Müller, Julia, and Christiane Schwieren. 2020. {``Big Five Personality Factors in the Trust Game.''} \emph{Journal of Business Economics} 90 (1): 37--55. \url{https://doi.org/10.1007/s11573-019-00928-3}.
