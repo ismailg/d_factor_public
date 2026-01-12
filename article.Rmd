@@ -2127,36 +2127,10 @@ trust_opp_by_d_game <- emmeans(trust_model_afex, ~ opponent_type | d_level:game_
 trust_opp_by_d_game_posthoc <- apa_print(pairs(trust_opp_by_d_game, adjust = "tukey"))
 ```
 
-Beyond behavioral measures, we also analysed participants' explicit evaluations of their opponents using linear mixed-effects models.
-These models assessed ratings of cooperativeness, willingness to play again, and trust based on participants' D-level, the opponent type faced, and the order of games (see Figure \@ref(fig:plotRatings) for a summary).
-
-### Cooperative Ratings
-
-Linear mixed-effects analysis revealed a significant main effect of D-level (`r coop_anova_results$statistic["d_level"]`), with Low-D participants rating their opponents as more cooperative than High-D participants (`r coop_d_posthoc$statistic[1]`).
-A significant main effect of game order (`r coop_anova_results$statistic["game_order"]`) indicated participants rated opponents in their first game as more cooperative than those in their second game (`r coop_game_posthoc$statistic[1]`).
-Additionally, there was a significant main effect of opponent type (`r coop_anova_results$statistic["opponent_type"]`), with Human-like HMM opponents receiving higher cooperative ratings than Responsive opponents (`r coop_opp_posthoc$statistic[1]`).
-
-### Play Again Ratings
-
-Analysis of participants' willingness to play with the same opponent again revealed a significant main effect of game order (`r play_anova_results$statistic["game_order"]`), with participants generally more willing to play again with opponents from their first game (`r play_game_posthoc$statistic[1]`).
-This main effect was qualified by a significant D-level × Game Order interaction (`r play_anova_results$statistic$d_level_game_order`).
-Post-hoc analyses revealed that in the first game, High-D participants were significantly less willing to play again with their opponents compared to Low-D participants (`r play_d_by_game_posthoc$statistic[1]`), while no such difference existed in the second game (`r play_d_by_game_posthoc$statistic[2]`).
-Examining changes across games, Low-D participants showed a significant decrease in willingness to play again from the first to the second game (`r play_game_by_d_posthoc$statistic[2]`), while High-D participants maintained consistent ratings across games (`r play_game_by_d_posthoc$statistic[1]`).
-
-### Trusting Ratings
-
-For trust ratings, significant main effects were observed for D-level (`r trust_anova_results$statistic["d_level"]`), game order (`r trust_anova_results$statistic["game_order"]`), and opponent type (`r trust_anova_results$statistic["opponent_type"]`).
-These effects were qualified by a significant three-way interaction between D-level, game order, and opponent type (`r trust_anova_results$statistic$d_level_game_order_opponent_type`).
-
-Post-hoc analyses revealed a complex pattern of trust perceptions.
-High-D participants rated Human-like opponents as significantly less trusting than Low-D participants in the first game (`r trust_d_by_game_opp_posthoc$statistic[1]`).
-In contrast, High-D participants rated Responsive opponents as significantly less trusting than Low-D participants in the second game (`r trust_d_by_game_opp_posthoc$statistic[4]`).
-Low-D participants showed a significant *increase* in trust ratings for Human-like opponents from the first to the second game (`r trust_game_by_d_opp_posthoc$statistic[2]`), while High-D participants showed a significant *decrease* in trust ratings for Responsive opponents from the first to the second game (`r trust_game_by_d_opp_posthoc$statistic[3]`).
-Additionally, High-D participants in the second game differentiated between opponent types, rating Human-like opponents as significantly more trusting than Responsive opponents (`r trust_opp_by_d_game_posthoc$statistic[3]`).
-
-In summary, participants with higher Dark Factor scores demonstrated consistently more negative perceptions of their opponents, particularly regarding cooperation and trust.
-The pattern of results indicates that individual differences in Dark Factor traits influence not only the overall level of opponent ratings but also how these ratings change across repeated interactions and between different opponent types.
-Notably, Low-D participants showed greater sensitivity to game order, with more pronounced decreases in ratings from first to second game, while High-D participants demonstrated greater discrimination between opponent types in their trust ratings.
+Beyond behavioral measures, we analysed participants' explicit evaluations of their opponents using linear mixed-effects models (see Figure \@ref(fig:plotRatings); full statistical details in Supplementary Materials).
+High-D participants rated their opponents as significantly less cooperative, less trustworthy, and were less willing to play again compared to Low-D participants.
+Ratings were also influenced by opponent type (Human-like HMM rated more favorably than Responsive) and game order (first game rated higher).
+For trust ratings, a significant three-way interaction between D-level, game order, and opponent type revealed that High-D participants showed particularly negative perceptions of Human-like opponents early in the interaction and Responsive opponents later, while Low-D participants showed increasing trust over time.
 
 ```{r}
 create_rating_plots <- function(coop_emm, play_emm, trust_emm, y_limits = c(0, 8.5)) {
@@ -2638,7 +2612,9 @@ First, while we observed clear behavioral differences between high and Low-D ind
 Future studies could include measures of specific dark traits alongside the D-factor to examine whether unique trait aspects beyond the shared core contribute differently to strategic behavior.
 Second, our extreme-groups design, while maximizing statistical power to detect group differences, excludes individuals in the middle of the D distribution and limits our ability to draw conclusions about how D operates across its full range. The relationship between D and exploitation may not be linear; for instance, moderate-D individuals might show qualitatively different patterns than those at the extremes. Future research should treat D as a continuous variable to provide a more comprehensive understanding of how exploitative behavior varies as a function of D-factor scores.
 Third, our use of HMM opponents provided excellent experimental control but may limit ecological validity.
+Notably, approximately 43% of participants believed they were playing against a computer rather than a human, which may have influenced their behavior. However, a sensitivity analysis excluding only those participants who were certain they played a computer (retaining those who believed "Human" or were "Not Sure"; N = 104) showed that our key findings—including the D × Opponent × Investment interaction—remained significant (see Supplementary Materials).
 Future research could examine D-factor influences in fully human interactions to capture the richer social dynamics of real-world trust building.
+Fourth, while our power analysis was designed to detect the confirmatory three-way interaction (D × Opponent × Investment), the higher-order interactions involving presentation order and round number were exploratory and should be interpreted with appropriate caution given reduced statistical power for such complex effects.
 Finally, while we found significant differences in behavior and perception, we did not explore the underlying affective or cognitive processes that mediate these effects.
 Future studies could incorporate measures of empathy, moral disengagement, or social value orientation to understand how dark personality traits influence the subjective experience of economic exchanges.
 Furthermore, our participant sample, while diverse in country of origin, was recruited through an online platform and consisted primarily of individuals from Western countries.

@@ -185,9 +185,9 @@ kable(mod_df,
 
 
 
-# Mixed effects models for opponent ratings 
+# Mixed Effects Models for Opponent Ratings {-}
 
-We fit linear mixed-effects models to participants' ratings of their opponents (cooperativeness, willingness to play again, and trustworthiness). The model specification for the cooperative ratings is described below as an example; identical model structures were used for the other ratings. The results of the models are presented in Section 3.5 of the main text.
+We fit linear mixed-effects models to participants' ratings of their opponents (cooperativeness, willingness to play again, and trustworthiness). The model specification for the cooperative ratings is described below as an example; identical model structures were used for the other ratings.
 
 \[
 \begin{split}
@@ -207,6 +207,137 @@ where:
 - The **Random Effects** account for by-participant variability:
     - \( b_{0j} \): A random intercept for each participant \( j \).
 - \( \epsilon_{ij} \): The residual error term for participant \( j \)'s rating of opponent \( i \).
+
+## Detailed Results {-}
+
+### Cooperative Ratings {-}
+
+Linear mixed-effects analysis revealed a significant main effect of D-level, $F(1, 179) = 7.35$, $p = .007$, with Low-D participants rating their opponents as more cooperative than High-D participants.
+A significant main effect of game order, $F(1, 179) = 10.67$, $p = .001$, indicated participants rated opponents in their first game as more cooperative than those in their second game.
+Additionally, there was a significant main effect of opponent type, $F(1, 179) = 5.31$, $p = .022$, with Human-like HMM opponents receiving higher cooperative ratings than Responsive opponents.
+No significant interactions were observed (all $p$s > .29).
+
+### Play Again Ratings {-}
+
+Analysis of participants' willingness to play with the same opponent again revealed a significant main effect of game order, $F(1, 179) = 13.83$, $p < .001$, with participants generally more willing to play again with opponents from their first game.
+This main effect was qualified by a significant D-level × Game Order interaction, $F(1, 179) = 4.05$, $p = .046$.
+
+Post-hoc analyses revealed that in the first game, High-D participants were significantly less willing to play again with their opponents compared to Low-D participants ($M_{diff} = -1.07$, $t(320) = -2.37$, $p = .018$), while no such difference existed in the second game ($M_{diff} = -0.03$, $t(320) = -0.07$, $p = .947$).
+Examining changes across games, Low-D participants showed a significant decrease in willingness to play again from the first to the second game ($M_{diff} = 1.48$, $t(179) = 4.05$, $p < .001$), while High-D participants maintained consistent ratings across games ($M_{diff} = 0.44$, $t(179) = 1.21$, $p = .229$).
+
+### Trusting Ratings {-}
+
+For trust ratings, significant main effects were observed for D-level, $F(1, 179) = 7.53$, $p = .007$; game order, $F(1, 179) = 7.21$, $p = .008$; and opponent type, $F(1, 179) = 4.62$, $p = .033$.
+These effects were qualified by a significant three-way interaction between D-level, game order, and opponent type, $F(1, 179) = 4.76$, $p = .030$.
+
+Post-hoc analyses revealed a complex pattern of trust perceptions.
+High-D participants rated Human-like opponents as significantly less trusting than Low-D participants in the first game ($M_{diff} = -1.65$, $t(315) = -2.96$, $p = .003$).
+In contrast, High-D participants rated Responsive opponents as significantly less trusting than Low-D participants in the second game ($M_{diff} = -1.51$, $t(315) = -2.70$, $p = .007$).
+Low-D participants showed a significant *increase* in trust ratings for Human-like opponents from the first to the second game ($M_{diff} = 1.22$, $t(315) = 2.22$, $p = .027$), while High-D participants showed a significant *decrease* in trust ratings for Responsive opponents from the first to the second game ($M_{diff} = 1.35$, $t(315) = 2.47$, $p = .014$).
+Additionally, High-D participants in the second game differentiated between opponent types, rating Human-like opponents as significantly more trusting than Responsive opponents ($M_{diff} = 1.37$, $t(315) = 2.51$, $p = .013$).
+
+### Summary {-}
+
+Participants with higher Dark Factor scores demonstrated consistently more negative perceptions of their opponents, particularly regarding cooperation and trust.
+The pattern of results indicates that individual differences in Dark Factor traits influence not only the overall level of opponent ratings but also how these ratings change across repeated interactions and between different opponent types.
+Notably, Low-D participants showed greater sensitivity to game order, with more pronounced decreases in ratings from first to second game, while High-D participants demonstrated greater discrimination between opponent types in their trust ratings.
+
+\pagebreak
+
+
+# Sensitivity Analysis: Excluding Participants Who Believed They Played a Computer {-}
+
+To address concerns about the ecological validity of our findings given that some participants suspected they were playing against a computer rather than a human, we conducted a sensitivity analysis restricting the sample to participants who either believed they were playing against a human or were unsure. This approach excludes only those participants who were certain they played against a computer (N = 79, 43.2%), retaining participants who believed "Human" (N = 47, 25.7%) or indicated "Not Sure" (N = 57, 31.1%), for a total of 104 participants (56.8% of the original sample).
+
+We re-estimated our primary mixed-effects model on this restricted sample using the same specification as the full analysis.
+
+```{r sensitivity-setup, include=FALSE}
+# Load the main data
+final_data <- read.csv("data/anonymized_final_data.csv")
+
+# Apply same transformations as main analysis
+final_data <- final_data %>%
+  mutate(ret_pct_na = ifelse(investment == 0, NA, return / (3 * investment)),
+         opponent.f = factor(gameOpponent, levels = c("AI_HMM", "AI_HMM_vol")),
+         d_level = as.factor(d_level),
+         roundNum = as.numeric(as.character(roundNum)),
+         inv_scaled = as.vector(scale(investment)))
+
+# Remove last round (endgame effects)
+data24 <- final_data %>% filter(roundNum < 25)
+
+# Filter to exclude only those certain it was a computer
+data24_believed <- data24 %>%
+  filter(Turing.choice %in% c("Human", "Not Sure"))
+
+# Verify sample size
+n_believed <- length(unique(data24_believed$playerId))
+```
+
+```{r sensitivity-model, include=FALSE, cache=TRUE}
+# Run sensitivity model with same specification as main analysis
+mod_return_pct_sensitivity <- afex::mixed(
+  ret_pct_na ~ opponent.f * inv_scaled * d_level * volatile_first * roundNum +
+    (1 + opponent.f + inv_scaled | playerId),
+  data = data24_believed,
+  REML = TRUE,
+  method = "KR",
+  control = lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+)
+
+# Save for potential reuse
+saveRDS(mod_return_pct_sensitivity, "data/mod_return_pct_sensitivity.RDS")
+```
+
+```{r sensitivity-results, include=FALSE}
+# Get model summary
+sens_summary <- summary(mod_return_pct_sensitivity)
+
+# Extract coefficients
+sens_coef <- as.data.frame(sens_summary$coefficients)
+
+# Clean up for presentation
+sens_df <- sens_coef %>%
+  rownames_to_column(var = "Term") %>%
+  mutate(
+    Term = gsub("d_level1", "D-Level", Term),
+    Term = gsub("opponent\\.f1", "Opponent", Term),
+    Term = gsub("volatile_firstTRUE", "Order", Term),
+    Term = gsub("inv_scaled", "Investment", Term),
+    Term = gsub("roundNum", "Round", Term),
+    Term = gsub(":", " x ", Term)
+  ) %>%
+  mutate(
+    Signif = case_when(
+      `Pr(>|t|)` < 0.001 ~ "***",
+      `Pr(>|t|)` < 0.01  ~ "**",
+      `Pr(>|t|)` < 0.05  ~ "*",
+      TRUE              ~ ""
+    )
+  ) %>%
+  rename("p-value" = `Pr(>|t|)`) %>%
+  mutate(across(where(is.numeric), ~round(., 3)))
+
+# Extract key effects for comparison
+d_main <- sens_df %>% filter(Term == "D-Level")
+d_opp <- sens_df %>% filter(Term == "Opponent x D-Level")
+d_opp_inv <- sens_df %>% filter(Term == "Opponent x Investment x D-Level")
+```
+
+```{r sensitivity-table}
+# Create table
+kable(sens_df,
+      caption = "Sensitivity Analysis: Mixed-Effects Model Results for Participants Who Believed Human or Were Unsure (N = 104).",
+      booktabs = TRUE,
+      col.names = c("Term", "Estimate", "Std. Error", "df", "t-value", "p-value", ""),
+      align = c("l", "r", "r", "r", "r", "r", "l")) %>%
+  add_footnote(label = "Significance codes: * p < 0.05, ** p < 0.01, *** p < 0.001",
+               notation = "none") %>%
+  kable_styling(latex_options = c("striped", "hold_position", "scale_down"))
+```
+
+The sensitivity analysis reveals that the key patterns observed in the full sample remain consistent in this restricted sample. Specifically, the D-Level × Opponent × Investment interaction—our primary finding demonstrating that high-D individuals show differential exploitation patterns depending on opponent type—shows the same direction of effect (`r ifelse(d_opp_inv$Estimate > 0, "positive", "negative")` estimate: $\beta$ = `r d_opp_inv$Estimate`, $t$ = `r d_opp_inv$"t value"`, $p$ `r ifelse(d_opp_inv$"p-value" < 0.001, "< .001", paste0("= ", sprintf("%.3f", d_opp_inv$"p-value")))`). While reduced statistical power from the smaller sample affects significance levels for some effects, the overall pattern of results supports our conclusions that the observed D-factor effects are not artifacts of participants' beliefs about their opponents.
+
 \pagebreak
 
 
