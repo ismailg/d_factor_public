@@ -109,7 +109,7 @@ where:
 ```
 
 
-```{r myTableRet, results='asis'}
+```{r, results='asis'}
 # # Create table using kable and kableExtra
 # kable(mod_df, 
 #       caption = "Summary of Mixed-Effects Model of participant returns across all rounds",
@@ -164,7 +164,7 @@ mod_df <- mod_df %>%
 ```
 
 
-```{r}
+```{r myTableRet}
 # Load required packages for table creation
 library(knitr)
 library(kableExtra)
