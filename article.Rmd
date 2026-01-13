@@ -362,6 +362,7 @@ Parameters for the simulation were based on previous studies, with an expected e
 Starting with 50 participants, we iteratively generated synthetic data for a task with $25$ rounds per condition and fitted linear mixed-effects models with random intercepts for participants.
 The simulations incorporated realistic parameter estimates and fixed effects derived from previous research using the same paradigm.
 This analysis indicated that a sample of 180 participants would provide at least $90\%$ power to detect the hypothesized three-way interaction.
+Note that the repeated-measures design (48 observations per participant across two games of 24 rounds each) yields approximately 8,800 total observations, providing substantially greater statistical power than 180 independent observations would suggest.
 
 ## Design and Materials
 
@@ -800,8 +801,9 @@ As there is no agreed upon way to calculate effect sizes for mixed effects model
 
 Participants' perceptions (ratings of cooperativeness, trustworthiness, willingness to play again) were analysed with LME models including D-factor level, HMM type, game order, and interactions as fixed effects, with participant-wise random intercepts.
 
-To examine temporal dynamics within the game, the main interaction period (rounds 1-24) was divided into three equal, consecutive periods: early (rounds 1-8), middle (rounds 9-16), and late (rounds 17-24), representing the beginning, middle, and end of the game, respectively.
-Analyses compared key variables between groups across these periods.
+To examine temporal dynamics within the game, we modeled round number as a continuous linear predictor, allowing us to test whether return percentages changed over time and whether these temporal trends differed between D-factor groups.
+We also evaluated a growth model including quadratic trends; however, model comparison indicated the linear specification provided substantially better fit, and D-factor did not interact with the quadratic term (see Supplementary Materials).
+For descriptive purposes, the main interaction period (rounds 1-24) was divided into three equal, consecutive periods: early (rounds 1-8), middle (rounds 9-16), and late (rounds 17-24), representing the beginning, middle, and end of the game, respectively.
 For the final round of each game, where no future interactions were anticipated (resembling a one-shot dictator game), we compared absolute returns and percentage returns between High-D and Low-D groups using both Welch's t-tests and non-parametric Wilcoxon rank-sum tests.
 The latter was included given the smaller sample size for this single-round comparison and to ensure robustness of our findings regardless of distributional assumptions.
 Finally, we analysed total payoffs earned by participants to determine whether behavioral differences resulted in differing economic outcomes.

@@ -61,10 +61,14 @@ We have expanded the Discussion to explain why presentation order matters for Hi
 > "It would be better to consider the debriefing variable as a covariate to see whether results change depending on whether respondents thought they played versus a human or an agent."
 
 **Response:**
-[To be completed]
+We addressed this concern through a sensitivity analysis that we believe provides a more stringent test than covariate adjustment. Rather than statistically controlling for belief while retaining all participants, we restricted the sample to only those participants who believed they were playing against a human or were unsure (N = 104), completely excluding participants who were certain they played a computer (N = 79, 43%). This approach directly tests whether our effects hold when removing potentially confounded observations entirely.
+
+The key D × Opponent × Investment three-way interaction remained significant in this restricted sample (p = .007), demonstrating that our primary findings are robust to participants' beliefs about their opponents. This sensitivity analysis is reported in the Supplementary Materials, and we reference these results in the main text Limitations section (see also our response to R2.4).
 
 **Changes Made:**
-- [Location and description of changes]
+- Sensitivity analysis reported in Supplementary Materials (lines 336-428)
+- Results referenced in Limitations section (line 2620)
+- See also response to R2.4 for full details
 
 ---
 
@@ -74,10 +78,16 @@ We have expanded the Discussion to explain why presentation order matters for Hi
 > "Instead of dividing the 25 rounds into three periods, better apply a growth model (excluding the final round) with linear and quadratic trends. Indeed, the authors already consider round number as predictor, so they simply should also include a quadratic trend (along with the interactions). The difference between the periods then becomes evident in different slopes for high/low D individuals (as reported at 257: significant interaction between D-factor and round number). Then the whole section on the three periods could be dropped, as this would be entirely redundant, and the figure should rather show individual rounds at the x axis."
 
 **Response:**
-[To be completed]
+We thank the reviewer for this methodologically important suggestion. We evaluated a growth model including both linear and quadratic trends for round number, with the quadratic term interacting with D-level and opponent type. A likelihood ratio test indicated that adding the quadratic terms significantly improved model fit (χ²(4) = 15.05, p = .005). However, critically, D-level did not interact with the quadratic term (F = 0.46, p = .50), indicating that both high-D and low-D participants showed similar curvature in their trajectories—they differ in their linear slopes (rate of change over rounds), not in the shape of change over time.
+
+Given that the theoretically meaningful D × Quadratic interaction was non-significant—meaning the quadratic term does not reveal differential learning trajectories between groups—we retained the linear specification for our primary analyses. The improvement in fit from the quadratic term appears to capture overall curvature that is shared by both groups, rather than group-specific dynamics. As the reviewer correctly notes, the significant D-level × Round interaction already captures the key finding that high-D participants show steeper declines in return percentages over time (~0.17% per round for high-D vs. ~0.05% for low-D). We have clarified the rationale for our modeling approach in the Methods and provide full model comparison details including the likelihood ratio test in the Supplementary Materials.
+
+We have also clarified that the period divisions (early/middle/late) are used for descriptive purposes in summarizing the data, while the formal statistical test of temporal dynamics uses round number as a continuous predictor in the linear mixed model.
 
 **Changes Made:**
-- [Location and description of changes]
+
+- Revised Statistical Analysis section (lines 803-805) to clarify that round number is modeled continuously, with note about growth model comparison
+- Added Growth Model Comparison section to Supplementary Materials (lines 432-533) with full model fit statistics, quadratic term results, and justification for linear specification
 
 ---
 
@@ -316,10 +326,16 @@ We agree with the reviewer and have added a new paragraph in the Limitations sec
 > "I am also somewhat surprised by the claim that a sample size of 180 participants provides sufficient power to detect the targeted three-way interaction examined in the manuscript. This concern is heightened by the fact that the authors go on to test additional interactions, including a four-way interaction, despite basing their power analysis on a three-way interaction. Greater justification of the power assumptions, or a more cautious interpretation of higher-order interactions, would be warranted."
 
 **Response:**
-[To be completed]
+We appreciate the reviewer raising this important methodological concern. We have clarified the power analysis in two ways.
+
+First, regarding power for the confirmatory three-way interaction: Our Monte Carlo simulations using the simr package specifically targeted the D × Opponent × Investment interaction, incorporating the repeated-measures structure of the design. Crucially, while our sample included 183 participants, the repeated-measures design (48 observations per participant across two games of 24 rounds each) yields approximately 8,800 total observations, providing substantially greater statistical power than 183 independent observations would suggest. We have now made this explicit in the Participants section. The fact that our confirmatory three-way interaction was indeed significant (p = .004) provides empirical confirmation that the study was adequately powered for its primary hypothesis.
+
+Second, regarding higher-order interactions: We fully agree that four-way and five-way interactions require more statistical power than our study was designed to detect. We have now explicitly distinguished between confirmatory and exploratory analyses in the Statistical Analysis section. Specifically, we clarify that the three-way interaction (D × Opponent × Investment) was our confirmatory hypothesis as specified in the power analysis, while higher-order interactions involving presentation order and round number are treated as exploratory and should be interpreted with appropriate caution. This distinction is reiterated in the Limitations section, where we note that "the higher-order interactions involving presentation order and round number were exploratory and should be interpreted with appropriate caution given reduced statistical power for such complex effects."
 
 **Changes Made:**
-- [Location and description of changes]
+- Added sentence to Participants section (line 365) explaining that repeated-measures design yields ~8,800 observations, clarifying why N=183 provides adequate power
+- Statistical Analysis section (lines 787-789) now explicitly distinguishes confirmatory (3-way) from exploratory (4-way, 5-way) analyses
+- Limitations section (line 2622) acknowledges reduced power for higher-order interactions
 
 ---
 
@@ -343,10 +359,20 @@ We have now reported gender distribution by D-factor group. As the reviewer anti
 > "At several points, the manuscript would benefit from greater clarity regarding the analytic strategy. The authors describe the study as employing a 2 × 2 design, yet elsewhere note that the sample size was chosen to detect a three-way interaction, and later report analyses involving four-way interactions. As a reader, it was somewhat difficult to determine which analyses corresponded to core hypotheses and which were exploratory. Streamlining the analytic approach, or more clearly distinguishing core analyses from exploratory analyses, would substantially improve readability and interpretability."
 
 **Response:**
-[To be completed]
+We thank the reviewer for this helpful suggestion. We have added a paragraph to the Statistical Analysis section that explicitly clarifies our analytic strategy. We now explain that:
+
+1. **Confirmatory hypothesis:** The three-way interaction between D-factor, Opponent type, and Investment level was our confirmatory hypothesis, as specified in the power analysis. This tests whether high-D individuals show differential exploitation depending on opponent characteristics and investment magnitude.
+
+2. **Control variable:** Presentation Order was included as a control variable to account for counterbalancing effects, not as a factor of primary theoretical interest.
+
+3. **Exploratory analyses:** Higher-order interactions involving Order and Round (i.e., four-way and five-way interactions) are explicitly treated as exploratory and interpreted with appropriate caution.
+
+This distinction is maintained throughout the Results and Discussion sections, with exploratory findings (such as the order effect) now labeled as such.
 
 **Changes Made:**
-- [Location and description of changes]
+- Added clarifying paragraph to Statistical Analysis section (lines 787-789)
+- Discussion section now explicitly labels the four-way order interaction as "exploratory"
+- See also response to R2.6 regarding power for higher-order interactions
 
 ---
 

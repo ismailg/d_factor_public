@@ -429,4 +429,126 @@ The sensitivity analysis reveals that the key patterns observed in the full samp
 \pagebreak
 
 
+# Growth Model Comparison: Linear vs. Polynomial Trends {-}
+
+Following reviewer suggestions, we evaluated whether adding a quadratic trend for round number would improve model fit and reveal differential learning trajectories between D-level groups. We compared our primary linear model with a growth model that included both linear and quadratic round terms, with the quadratic term interacting with D-level and opponent type.
+
+```{r growth-model-setup, include=FALSE}
+# Load the main data (if not already loaded)
+if (!exists("data24")) {
+  final_data <- read.csv("data/anonymized_final_data.csv")
+
+  final_data <- final_data %>%
+    mutate(ret_pct_na = ifelse(investment == 0, NA, return / (3 * investment)),
+           opponent.f = factor(gameOpponent, levels = c("AI_HMM", "AI_HMM_vol")),
+           d_level = as.factor(d_level),
+           roundNum = as.numeric(as.character(roundNum)),
+           inv_scaled = as.vector(scale(investment)))
+
+  data24 <- final_data %>% filter(roundNum < 25)
+}
+
+# Center roundNum to reduce multicollinearity
+data24$roundNum_c <- data24$roundNum - mean(data24$roundNum)
+data24$roundNum_c2 <- data24$roundNum_c^2
+```
+
+```{r growth-models, include=FALSE, cache=TRUE}
+library(afex)
+
+# Linear model (our primary model)
+mod_linear <- afex::mixed(
+  ret_pct_na ~ opponent.f * inv_scaled * d_level * volatile_first * roundNum +
+    (1 + opponent.f + inv_scaled | playerId),
+  data = data24,
+  REML = TRUE,
+  method = "KR"
+)
+
+# Growth model with quadratic term
+mod_growth <- afex::mixed(
+  ret_pct_na ~ opponent.f * inv_scaled * d_level * volatile_first * roundNum_c +
+    roundNum_c2 * d_level * opponent.f +
+    (1 + opponent.f + inv_scaled | playerId),
+  data = data24,
+  REML = TRUE,
+  method = "KR"
+)
+```
+
+```{r growth-comparison, include=FALSE}
+# Extract underlying lmer models
+lmer_linear <- mod_linear$full_model
+lmer_growth <- mod_growth$full_model
+
+# Model fit statistics
+aic_linear <- AIC(lmer_linear)
+aic_growth <- AIC(lmer_growth)
+bic_linear <- BIC(lmer_linear)
+bic_growth <- BIC(lmer_growth)
+
+# Likelihood ratio test comparing nested models
+# Note: Models must be fit with ML (not REML) for valid LRT comparison
+# Refit with ML for comparison
+lmer_linear_ml <- update(lmer_linear, REML = FALSE)
+lmer_growth_ml <- update(lmer_growth, REML = FALSE)
+
+# Likelihood ratio test
+lrt_result <- anova(lmer_linear_ml, lmer_growth_ml)
+lrt_chisq <- lrt_result$Chisq[2]
+lrt_df <- lrt_result$Df[2]
+lrt_p <- lrt_result$`Pr(>Chisq)`[2]
+
+# Extract ANOVA results for key effects
+growth_anova <- anova(mod_growth)
+
+# Quadratic term significance
+quad_F <- growth_anova$`F`[which(rownames(growth_anova) == "roundNum_c2")]
+quad_p <- growth_anova$`Pr(>F)`[which(rownames(growth_anova) == "roundNum_c2")]
+
+# D-level x Quadratic interaction
+d_quad_F <- growth_anova$`F`[which(rownames(growth_anova) == "d_level:roundNum_c2")]
+d_quad_p <- growth_anova$`Pr(>F)`[which(rownames(growth_anova) == "d_level:roundNum_c2")]
+
+# Core 3-way interaction in growth model
+core_3way_F <- growth_anova$`F`[which(rownames(growth_anova) == "opponent.f:inv_scaled:d_level")]
+core_3way_p <- growth_anova$`Pr(>F)`[which(rownames(growth_anova) == "opponent.f:inv_scaled:d_level")]
+
+# Format p-values
+format_p <- function(p) {
+  if (p < 0.001) return("< .001")
+  else return(sprintf("= %.3f", p))
+}
+```
+
+## Model Comparison Results {-}
+
+**Likelihood ratio test:**
+
+We used a likelihood ratio test to formally compare the linear and growth models. Models were refit using maximum likelihood estimation for valid comparison.
+
+The likelihood ratio test indicated that the growth model (with quadratic terms) did `r ifelse(lrt_p < 0.05, "", "not ")` significantly improve fit over the linear model ($\chi^2$(`r lrt_df`) = `r round(lrt_chisq, 2)`, *p* `r format_p(lrt_p)`).
+
+**Model fit indices:**
+
+| Model | AIC | BIC |
+|-------|-----|-----|
+| Linear (primary) | `r round(aic_linear, 1)` | `r round(bic_linear, 1)` |
+| Growth (quadratic) | `r round(aic_growth, 1)` | `r round(bic_growth, 1)` |
+
+Note: Lower values indicate better fit. The BIC, which penalizes model complexity more heavily than AIC, favors the linear model by `r abs(round(bic_linear - bic_growth, 0))` points.
+
+**Key findings from the growth model:**
+
+1. **Quadratic term:** The quadratic trend was statistically significant (*F* = `r round(quad_F, 2)`, *p* `r format_p(quad_p)`), indicating some curvature in the overall trajectory of return percentages across rounds.
+
+2. **D-level × Quadratic interaction:** Critically, D-level did *not* interact with the quadratic term (*F* = `r round(d_quad_F, 2)`, *p* `r format_p(d_quad_p)`). This indicates that high-D and low-D participants showed similar curvature in their trajectories---they differ in their linear slopes (rate of change), not in the shape of change over time.
+
+3. **Core three-way interaction:** The D-level × Opponent × Investment interaction became marginally significant in the growth model (*F* = `r round(core_3way_F, 2)`, *p* `r format_p(core_3way_p)`), compared to *p* = .004 in the linear model.
+
+**Conclusion:** Although the likelihood ratio test `r ifelse(lrt_p < 0.05, "reached significance", "did not reach significance")`, the absence of a theoretically meaningful D-level × Quadratic interaction (*p* = `r sprintf("%.2f", d_quad_p)`) indicates that adding quadratic trends does not reveal differential learning trajectories between groups. Both high-D and low-D participants showed similar curvature; they differ only in their linear slopes. Given this, and the BIC's preference for the simpler model, we retained the linear specification. The key insight---that high-D participants show steeper declines in return percentages over time---is fully captured by the significant D-level × Round interaction in the linear model.
+
+\pagebreak
+
+
 # References {-}
