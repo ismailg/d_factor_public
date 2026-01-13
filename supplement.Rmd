@@ -210,31 +210,119 @@ where:
 
 ## Detailed Results {-}
 
+```{r ratings-data-setup, include=FALSE}
+# Load the main data
+final_data <- read.csv("data/anonymized_final_data.csv")
+
+# Prepare ratings data (same as main article)
+ratings_data <- final_data %>%
+  filter(!is.na(rating_cooperative)) %>%
+  mutate(
+    game_order = factor(gameNum.f, levels = c("first game", "second game")),
+    opponent_type = case_when(
+      grepl("AI_HMM_vol", gameOpponent) ~ "Responsive",
+      grepl("AI_HMM", gameOpponent) ~ "Human-like"
+    ),
+    opponent_type = factor(opponent_type),
+    d_level = factor(d_level)
+  ) %>%
+  dplyr::select(playerId, game_order, opponent_type, d_level,
+         rating_cooperative, rating_trusting, rating_playAgain) %>%
+  unique()
+```
+
+```{r ratings-models, include=FALSE, cache=TRUE}
+library(afex)
+library(emmeans)
+
+# Model for cooperative ratings
+coop_model_afex <- mixed(
+  rating_cooperative ~ d_level * game_order * opponent_type + (1 | playerId),
+  data = ratings_data,
+  method = "KR"
+)
+
+# Model for play again ratings
+play_model_afex <- mixed(
+  rating_playAgain ~ d_level * game_order * opponent_type + (1 | playerId),
+  data = ratings_data,
+  method = "KR"
+)
+
+# Model for trusting ratings
+trust_model_afex <- mixed(
+  rating_trusting ~ d_level * game_order * opponent_type + (1 | playerId),
+  data = ratings_data,
+  method = "KR"
+)
+```
+
+```{r ratings-apa-print, include=FALSE}
+library(papaja)
+
+# --- Cooperative Ratings ---
+coop_anova_results <- apa_print(coop_model_afex, es = "pes")
+
+# --- Play Again Ratings ---
+play_anova_results <- apa_print(play_model_afex, es = "pes")
+
+# Post-hoc for D-level × Game Order interaction
+play_d_by_game <- emmeans(play_model_afex, ~ d_level | game_order)
+play_d_by_game_pairs <- pairs(play_d_by_game, adjust = "tukey")
+play_d_by_game_posthoc <- apa_print(play_d_by_game_pairs)
+
+play_game_by_d <- emmeans(play_model_afex, ~ game_order | d_level)
+play_game_by_d_pairs <- pairs(play_game_by_d, adjust = "tukey")
+play_game_by_d_posthoc <- apa_print(play_game_by_d_pairs)
+
+# --- Trusting Ratings ---
+trust_anova_results <- apa_print(trust_model_afex, es = "pes")
+
+# Post-hoc for three-way interaction
+trust_d_by_game_opp <- emmeans(trust_model_afex, ~ d_level | game_order:opponent_type)
+trust_d_by_game_opp_pairs <- pairs(trust_d_by_game_opp, adjust = "tukey")
+trust_d_by_game_opp_posthoc <- apa_print(trust_d_by_game_opp_pairs)
+
+trust_game_by_d_opp <- emmeans(trust_model_afex, ~ game_order | d_level:opponent_type)
+trust_game_by_d_opp_pairs <- pairs(trust_game_by_d_opp, adjust = "tukey")
+trust_game_by_d_opp_posthoc <- apa_print(trust_game_by_d_opp_pairs)
+
+trust_opp_by_d_game <- emmeans(trust_model_afex, ~ opponent_type | d_level:game_order)
+trust_opp_by_d_game_pairs <- pairs(trust_opp_by_d_game, adjust = "tukey")
+trust_opp_by_d_game_posthoc <- apa_print(trust_opp_by_d_game_pairs)
+
+# Helper function for p-value formatting
+format_p <- function(p) {
+  if (p < 0.001) return("< .001")
+  else return(paste0("= ", sub("^0", "", sprintf("%.3f", p))))
+}
+```
+
 ### Cooperative Ratings {-}
 
-Linear mixed-effects analysis revealed a significant main effect of D-level, $F(1, 179) = 7.35$, $p = .007$, with Low-D participants rating their opponents as more cooperative than High-D participants.
-A significant main effect of game order, $F(1, 179) = 10.67$, $p = .001$, indicated participants rated opponents in their first game as more cooperative than those in their second game.
-Additionally, there was a significant main effect of opponent type, $F(1, 179) = 5.31$, $p = .022$, with Human-like HMM opponents receiving higher cooperative ratings than Responsive opponents.
-No significant interactions were observed (all $p$s > .29).
+Linear mixed-effects analysis revealed a significant main effect of D-level, `r coop_anova_results$full_result$d_level`, with Low-D participants rating their opponents as more cooperative than High-D participants.
+A significant main effect of game order, `r coop_anova_results$full_result$game_order`, indicated participants rated opponents in their first game as more cooperative than those in their second game.
+Additionally, there was a significant main effect of opponent type, `r coop_anova_results$full_result$opponent_type`, with Human-like HMM opponents receiving higher cooperative ratings than Responsive opponents.
+No significant interactions were observed (all *p*s > .29).
 
 ### Play Again Ratings {-}
 
-Analysis of participants' willingness to play with the same opponent again revealed a significant main effect of game order, $F(1, 179) = 13.83$, $p < .001$, with participants generally more willing to play again with opponents from their first game.
-This main effect was qualified by a significant D-level × Game Order interaction, $F(1, 179) = 4.05$, $p = .046$.
+Analysis of participants' willingness to play with the same opponent again revealed a significant main effect of game order, `r play_anova_results$full_result$game_order`, with participants generally more willing to play again with opponents from their first game.
+This main effect was qualified by a significant D-level × Game Order interaction, `r play_anova_results$full_result$d_level_game_order`.
 
-Post-hoc analyses revealed that in the first game, High-D participants were significantly less willing to play again with their opponents compared to Low-D participants ($M_{diff} = -1.07$, $t(320) = -2.37$, $p = .018$), while no such difference existed in the second game ($M_{diff} = -0.03$, $t(320) = -0.07$, $p = .947$).
-Examining changes across games, Low-D participants showed a significant decrease in willingness to play again from the first to the second game ($M_{diff} = 1.48$, $t(179) = 4.05$, $p < .001$), while High-D participants maintained consistent ratings across games ($M_{diff} = 0.44$, $t(179) = 1.21$, $p = .229$).
+Post-hoc analyses revealed that in the first game, High-D participants were significantly less willing to play again with their opponents compared to Low-D participants (`r play_d_by_game_posthoc$full_result$First_game_High_D_low_D`), while no such difference existed in the second game (`r play_d_by_game_posthoc$full_result$Second_game_High_D_low_D`).
+Examining changes across games, Low-D participants showed a significant decrease in willingness to play again from the first to the second game (`r play_game_by_d_posthoc$full_result$Low_D_First_game_second_game`), while High-D participants maintained consistent ratings across games (`r play_game_by_d_posthoc$full_result$High_D_First_game_second_game`).
 
 ### Trusting Ratings {-}
 
-For trust ratings, significant main effects were observed for D-level, $F(1, 179) = 7.53$, $p = .007$; game order, $F(1, 179) = 7.21$, $p = .008$; and opponent type, $F(1, 179) = 4.62$, $p = .033$.
-These effects were qualified by a significant three-way interaction between D-level, game order, and opponent type, $F(1, 179) = 4.76$, $p = .030$.
+For trust ratings, significant main effects were observed for D-level, `r trust_anova_results$full_result$d_level`; game order, `r trust_anova_results$full_result$game_order`; and opponent type, `r trust_anova_results$full_result$opponent_type`.
+These effects were qualified by a significant three-way interaction between D-level, game order, and opponent type, `r trust_anova_results$full_result$d_level_game_order_opponent_type`.
 
 Post-hoc analyses revealed a complex pattern of trust perceptions.
-High-D participants rated Human-like opponents as significantly less trusting than Low-D participants in the first game ($M_{diff} = -1.65$, $t(315) = -2.96$, $p = .003$).
-In contrast, High-D participants rated Responsive opponents as significantly less trusting than Low-D participants in the second game ($M_{diff} = -1.51$, $t(315) = -2.70$, $p = .007$).
-Low-D participants showed a significant *increase* in trust ratings for Human-like opponents from the first to the second game ($M_{diff} = 1.22$, $t(315) = 2.22$, $p = .027$), while High-D participants showed a significant *decrease* in trust ratings for Responsive opponents from the first to the second game ($M_{diff} = 1.35$, $t(315) = 2.47$, $p = .014$).
-Additionally, High-D participants in the second game differentiated between opponent types, rating Human-like opponents as significantly more trusting than Responsive opponents ($M_{diff} = 1.37$, $t(315) = 2.51$, $p = .013$).
+High-D participants rated Human-like opponents as significantly less trusting than Low-D participants in the first game (`r trust_d_by_game_opp_posthoc$full_result$First_game_Human_like_High_D_low_D`).
+In contrast, High-D participants rated Responsive opponents as significantly less trusting than Low-D participants in the second game (`r trust_d_by_game_opp_posthoc$full_result$Second_game_Responsive_High_D_low_D`).
+Low-D participants showed a significant *decrease* in trust ratings for Human-like opponents from the first to the second game (`r trust_game_by_d_opp_posthoc$full_result$Low_D_Human_like_First_game_second_game`), while High-D participants similarly showed a significant *decrease* in trust ratings for Responsive opponents from the first to the second game (`r trust_game_by_d_opp_posthoc$full_result$High_D_Responsive_First_game_second_game`).
+Additionally, High-D participants in the second game differentiated between opponent types, rating Human-like opponents as significantly more trusting than Responsive opponents (`r trust_opp_by_d_game_posthoc$full_result$High_D_Second_game_Human_like_Responsive`).
 
 ### Summary {-}
 
