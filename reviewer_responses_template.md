@@ -204,7 +204,10 @@ We have added explicit gender distribution information to the Participants secti
 > "What was the lag between screening and the actual game? And clarify what is meant by 'multiple sessions'."
 
 **Response:**
-[To be completed]
+We have clarified the study timeline. The study comprised two sessions: (1) an initial screening survey where participants completed the D-factor measure, and (2) the main experimental task approximately one week later. The phrase "multiple sessions" in the original manuscript referred to our data collection schedule—we collected data over multiple recruitment sessions between October and November 2024—rather than to the participant experience. We have revised the wording to eliminate this ambiguity.
+
+**Changes Made:**
+- Clarified in Participants section (line 357): "These participants were then invited via Prolific to complete the main experiment approximately one week after the screening session (the study thus comprised two sessions: an initial screening survey and the main experimental task)."
 
 ---
 
@@ -214,7 +217,10 @@ We have added explicit gender distribution information to the Participants secti
 > "From the analyses it becomes clear that HMM types were randomly assigned to the study phases, but please make this explicit earlier"
 
 **Response:**
-[To be completed]
+We have made the randomization procedure explicit in the Design section. The text now clearly states: "Participants were randomly assigned to encounter either the Human-like or Responsive HMM first, with presentation order counterbalanced across participants."
+
+**Changes Made:**
+- Added explicit statement about random assignment and counterbalancing in Design section (line 370)
 
 ---
 
@@ -224,7 +230,10 @@ We have added explicit gender distribution information to the Participants secti
 > "Consider to qualify the realization of low vs high D individuals in the present study based on the distribution observed in the large multinational sample reported on in 10.1073/pnas.2500830122. I am not that sure whether 'high D' is actually the proper label as this rather seems to be a moderate level."
 
 **Response:**
-[To be completed]
+We appreciate this important point about contextualizing our groups. We have added normative comparisons in the Participants section. Our High-D group (M = 2.95 on the 1–5 scale) scored approximately 1.2 SDs above the normative mean (M = 2.14, SD = 0.67), placing them around the 88th percentile; our Low-D group (M = 1.22) scored approximately 1.4 SDs below, around the 8th percentile. While we retain the "High-D" and "Low-D" labels for consistency with our extreme-groups design, we acknowledge these represent relative extremes within our sample rather than clinical or absolute categorizations.
+
+**Changes Made:**
+- Added normative context in Participants section (line 356): percentile rankings relative to population distribution
 
 ---
 
@@ -234,7 +243,11 @@ We have added explicit gender distribution information to the Participants secti
 > "delete the explanation of the lack of differences in the payoff at 243 and just dwell on this in the discussion"
 
 **Response:**
-[To be completed]
+We have streamlined the Results section to report only the statistical finding for total payoffs. The interpretation and explanation of why High-D participants did not achieve higher payoffs despite their exploitative strategy is now presented solely in the Discussion section (lines 2591-2592), where we explain that the adaptive nature of the HMM opponent reduced investments in response to lower returns from High-D participants.
+
+**Changes Made:**
+- Results section (line 1397): Now reports only the statistical test results without interpretive explanation
+- Discussion (lines 2591-2592): Contains the full interpretation of the payoff finding
 
 ---
 
@@ -345,7 +358,7 @@ Second, regarding higher-order interactions: We fully agree that four-way and fi
 > "Additionally, it would be helpful to know whether the high-D and low-D groups were balanced with respect to gender. Unequal gender distributions could complicate the interpretation of the results, particularly given known gender differences in both personality traits and economic decision-making."
 
 **Response:**
-We have now reported gender distribution by D-factor group. As the reviewer anticipated, we found a significant gender imbalance: the High-D group was 70% male (64/91), while the Low-D group was 41% male (37/91), χ²(1) = 15.04, p < .001. This pattern is consistent with the well-documented finding that males tend to score higher on dark personality traits. We acknowledge this imbalance and will consider its implications in the Discussion/Limitations section. [Note: We may need to add supplementary analyses controlling for gender to address this concern more fully.]
+We have now reported gender distribution by D-factor group. As the reviewer anticipated, we found a significant gender imbalance: the High-D group was 70% male (64/91), while the Low-D group was 41% male (37/91), χ²(1) = 15.04, p < .001. This pattern is consistent with the well-documented finding that males tend to score higher on dark personality traits. We acknowledge this imbalance in the Discussion/Limitations section.
 
 **Changes Made:**
 - Added to Participants section: Gender distribution by D-level group with chi-square test results
@@ -382,7 +395,7 @@ This distinction is maintained throughout the Results and Discussion sections, w
 > "The manuscript raises a particularly intriguing idea that deserves further elaboration. The suggestion that high-D individuals may not possess superior social intelligence per se, but instead differ in their learning dynamics—such as being quicker to abandon pro-social norms when environmental predictability is detected—is very interesting. Expanding on this possibility would add depth to the discussion and help reframe the observed behavior as differential adaptation rather than simple strategic dominance. This distinction has important implications and could provide a fruitful direction for future research, particularly if individual learning rates can be modeled directly."
 
 **Response:**
-We thank the reviewer for highlighting this point. We have substantially expanded the learning dynamics interpretation in the Discussion. The revised text grounds the interpretation in our observed data: exploitation emerged gradually over rounds rather than immediately (suggesting learning rather than a pre-formed plan), and the strategy transfer effect points to experience-dependent adaptation. We frame this in reinforcement learning terms—High-D individuals may update strategies more rapidly or hold weaker prosocial priors. We cite relevant literature on dual-process theories of cooperation (Bear & Rand, 2016) and research on altered prediction error processing in trait expressions through which D may manifest, such as psychopathy (Gregory et al., 2015; Atanassova et al., 2025), while being careful to note that D represents the common core underlying these expressions rather than any single trait. We discuss practical implications (interventions might focus on strengthening prosocial priors) and suggest that future research could test this by fitting computational models to individual trajectories.
+We thank the reviewer for highlighting this point. We have substantially expanded the learning dynamics interpretation in the Discussion. The revised text grounds the interpretation in our observed data: exploitation emerged gradually over rounds rather than immediately (suggesting learning rather than a pre-formed plan), and the strategy transfer effect points to experience-dependent adaptation—consistent with research showing that people transfer learned opponent models between games (Guennouni & Speekenbrink, 2022). We frame this in reinforcement learning terms—High-D individuals may update strategies more rapidly or hold weaker prosocial priors. We cite relevant literature on dual-process theories of cooperation (Bear & Rand, 2016) and research on altered prediction error processing in trait expressions through which D may manifest, such as psychopathy (Gregory et al., 2015; Atanassova et al., 2025), while being careful to note that D represents the common core underlying these expressions rather than any single trait. We discuss practical implications (interventions might focus on strengthening prosocial priors) and suggest that future research could test this by fitting computational models to individual trajectories.
 
 **Changes Made:**
 - Expanded Discussion paragraph on learning dynamics (lines 2552-2558) from 3 sentences to full paragraph (~230 words)
@@ -401,7 +414,7 @@ We thank the reviewer for highlighting this point. We have substantially expande
 | Methods | Addition | Trust game explanation |
 | Methods | Addition | Predictor coding details |
 | Methods | Addition | Gender distribution |
-| Results | Major revision | Growth model replaces period analysis |
+| Results | Clarification | Growth model comparison added; linear model retained |
 | Results | Reorganization | Opponent ratings moved to supplement |
 | Discussion | Addition | D vs. Agreeableness/HH discussion |
 | Discussion | Addition | Learning dynamics elaboration |

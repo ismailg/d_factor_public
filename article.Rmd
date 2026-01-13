@@ -737,7 +737,7 @@ ggsave("plots/figure1.pdf", final_plot, width = 12, height = 7, dpi = 300)
 
 ### HMM Investor Construction
 
-Computerised investors were implemented as Hidden Markov Models (HMMs) trained on an independent dataset of 388 10-round RTGs (see Supplement for details).
+Computerised investors were implemented as Hidden Markov Models (HMMs) trained on an independent dataset of 381 10-round RTGs (see Supplement for details).
 This data-driven approach aimed to create investors mimicking human interaction patterns.
 The inferred HMM used three latent states ("low-trust", "medium-trust", "high-trust"), each associated with a learned probability distribution over possible investments (0-20 units; Figure \@ref(fig:combinedPlots).B).
 Transitions between states were probabilistic, modeled as a function of the investor's net return (amount returned - amount invested) in the previous round (Figure \@ref(fig:combinedPlots).C).
@@ -788,7 +788,7 @@ The model included Opponent type (Human-like vs. Responsive HMM), opponent prese
 To clarify our analytic strategy: our *confirmatory* hypothesis, as specified in the power analysis, was the three-way interaction between D-factor, Opponent type, and Investment level—testing whether high-D individuals would show differential exploitation depending on opponent characteristics and investment magnitude.
 Presentation Order was included as a control variable to account for counterbalancing, and Round number was included to capture temporal dynamics.
 Higher-order interactions involving Order and Round (i.e., four-way and five-way interactions) are treated as *exploratory* and interpreted with appropriate caution.
-Random effects included participant-wise intercepts and slopes for Investment.
+Random effects included participant-wise intercepts and slopes for Opponent type and Investment.
 This approach allowed us to account for the nested structure of the data while examining how D-factor influenced behavior across conditions.
 
 The model was estimated using the `afex` package [@Singmann2022] in R with Kenward-Roger approximation for degrees of freedom.
@@ -802,7 +802,7 @@ As there is no agreed upon way to calculate effect sizes for mixed effects model
 Participants' perceptions (ratings of cooperativeness, trustworthiness, willingness to play again) were analysed with LME models including D-factor level, HMM type, game order, and interactions as fixed effects, with participant-wise random intercepts.
 
 To examine temporal dynamics within the game, we modeled round number as a continuous linear predictor, allowing us to test whether return percentages changed over time and whether these temporal trends differed between D-factor groups.
-We also evaluated a growth model including quadratic trends; however, model comparison indicated the linear specification provided substantially better fit, and D-factor did not interact with the quadratic term (see Supplementary Materials).
+We also evaluated a growth model including quadratic trends; although the likelihood ratio test indicated the quadratic term significantly improved fit, D-factor did not interact with the quadratic term, and BIC favored the simpler specification; we therefore retained the linear model (see Supplementary Materials).
 For descriptive purposes, the main interaction period (rounds 1-24) was divided into three equal, consecutive periods: early (rounds 1-8), middle (rounds 9-16), and late (rounds 17-24), representing the beginning, middle, and end of the game, respectively.
 For the final round of each game, where no future interactions were anticipated (resembling a one-shot dictator game), we compared absolute returns and percentage returns between High-D and Low-D groups using both Welch's t-tests and non-parametric Wilcoxon rank-sum tests.
 The latter was included given the smaller sample size for this single-round comparison and to ensure robustness of our findings regardless of distributional assumptions.
@@ -1741,7 +1741,7 @@ ggplot(trend_data, aes(inv_level, slope, color = opponent, shape = opponent)) +
   )
 ```
 
-Analysis of the significant four-way interaction (`r papaja::apa_print(mod_return_pct)$full_result$opponent_f_inv_scaled_d_level_roundNum`), visualised in Figure \@ref(fig:oppExploit), revealed that only High-D participants facing the human-like opponent showed investment-dependent changes in behavior across rounds (`r format_p(relevant_contrast$p.value)`).
+Exploratory analysis of the significant four-way interaction (`r papaja::apa_print(mod_return_pct)$full_result$opponent_f_inv_scaled_d_level_roundNum`), visualised in Figure \@ref(fig:oppExploit), revealed that only High-D participants facing the human-like opponent showed investment-dependent changes in behavior across rounds (`r format_p(relevant_contrast$p.value)`).
 For these participants, returns decreased significantly across rounds with high investments (slope = `r sprintf("%.5f", high_d_human_high_inv$roundNum.trend)`, 95% CI [`r sprintf("%.5f", high_d_human_high_inv$asymp.LCL)`, `r sprintf("%.5f", high_d_human_high_inv$asymp.UCL)`]), but remained stable with low investments (slope = `r sprintf("%.5f", high_d_human_low_inv$roundNum.trend)`, 95% CI [`r sprintf("%.5f", high_d_human_low_inv$asymp.LCL)`, `r sprintf("%.5f", high_d_human_low_inv$asymp.UCL)`]), a significant difference in slopes (`r format_p(relevant_contrast$p.value)`).
 
 Neither Low-D participants nor High-D participants facing the responsive opponent showed this strategic pattern.
@@ -1827,9 +1827,9 @@ ggplot(trend_data, aes(x = inv_scaled, y = roundNum.trend,
 
 ```
 
-### Four-Way Interaction: Investment, Order, D-factor, and Round Number
+### Four-Way Interaction: Investment, Order, D-factor, and Round Number (Exploratory)
 
-The significant four-way interaction involving investment amount, order of opponent presentation (responsive first or stable/human-like first), D-factor, and round number (`r papaja::apa_print(mod_return_pct)$full_result$inv_scaled_d_level_volatile_first_roundNum`) reveals a complex interplay of factors influencing return behavior.
+The significant four-way interaction involving investment amount, order of opponent presentation (responsive first or stable/human-like first), D-factor, and round number (`r papaja::apa_print(mod_return_pct)$full_result$inv_scaled_d_level_volatile_first_roundNum`) reveals a complex interplay of factors influencing return behavior; as noted in our analytic strategy, this higher-order interaction is exploratory and should be interpreted with caution.
 As seen in Figure \@ref(fig:orderEffectPlot), The key finding is that the *order* in which participants faced the opponents, combined with their D-factor level, influenced how their returns changed over time *depending on the investment level*.
 
 <!-- To disentangle this interaction, we used `emtrends` to examine the simple slopes of return percentage over rounds, for each combination of D-factor, order condition, and investment level. We then used `test()` to determine if these slopes were significantly different from zero. -->
@@ -2605,7 +2605,7 @@ Second, our results highlight the importance of considering the temporal dimensi
 The emerging differences between high and Low-D participants over repeated interactions suggest that single-round economic games may underestimate the influence of personality traits on economic behavior.
 Future research should continue to examine how personality influences behavioral trajectories rather than just static decision points.
 Third, the interaction between D-factor and opponent volatility provides insight into the contextual sensitivity of dark personality traits.
-The finding that High-D individuals modulate their exploitation strategies based on opponent predictability suggests sophisticated social intelligence rather than rigid antisocial tendencies.
+The finding that High-D individuals modulate their exploitation strategies based on opponent predictability may reflect sophisticated social intelligence rather than rigid antisocial tendencies, though as discussed above, differential learning dynamics offer an alternative explanation.
 This nuance is important for developing more accurate models of how personality influences social decision-making across different environments.
 Finally, our findings have practical implications for promoting cooperation in economic exchanges.
 The fact that High-D participants received lower investments over time indicates that exploitative strategies trigger defensive responses that ultimately limit opportunities for mutual gain.
