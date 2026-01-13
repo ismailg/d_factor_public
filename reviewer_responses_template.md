@@ -31,10 +31,12 @@ We have added a paragraph at the beginning of the Repeated Trust Game section th
 > "The whole section on opponent ratings could be reduced to a couple of sentences with the detailed results moved to the supplement. I am particularly unsure concerning the purpose of the play again ratings. Maybe the cooperative ratings could be regarded manipulation/validity check, so consider reporting this earlier (again in a single sentence)."
 
 **Response:**
-[To be completed]
+We have condensed the opponent ratings section in the main text to four summary sentences while moving the full ANOVA results and post-hoc comparisons to the Supplementary Materials. The main text now reports that High-D participants rated opponents as less cooperative, less trustworthy, and were less willing to play with them again, with significant main effects of D-level and opponent type. The figure showing the three rating dimensions has been retained in the main text as it provides an accessible visual summary. Full statistical details including all post-hoc pairwise comparisons are now available in the supplement.
 
 **Changes Made:**
-- [Location and description of changes]
+- Condensed Results/Opponent Ratings section to 4 summary sentences (lines 2130-2133)
+- Added full statistical results to Supplementary Materials (lines 211-243), including ANOVA tables and post-hoc comparisons with verified statistics
+- Retained figure in main text for visual summary
 
 ---
 
@@ -44,10 +46,12 @@ We have added a paragraph at the beginning of the Repeated Trust Game section th
 > "The effect of game order is weird, and the authors should do more to explain this."
 
 **Response:**
-[To be completed]
+We have expanded the Discussion to explain why presentation order matters for High-D participants. The key mechanism is strategy transfer: when High-D individuals encounter the Human-like HMM first, they learn that exploitation is sustainable (the HMM does not rapidly punish non-reciprocation). This learned approach then carries over to their second game, creating a "head start" in exploitative behavior even when facing a different opponent type. We have added a citation to Erev & Roth (1998) on reinforcement learning in games to support this interpretation. This finding is explicitly labeled as exploratory, given that we did not predict it a priori.
 
 **Changes Made:**
-- [Location and description of changes]
+- Expanded Discussion section (lines 2582-2591) with strategy transfer mechanism explanation
+- Added citation: Erev & Roth (1998) on reinforcement learning in games
+- Labeled finding as exploratory
 
 ---
 
@@ -284,10 +288,12 @@ We agree with the reviewer and have revised all passages that could be misread a
 > "The use of HMM agents is a particularly appealing feature of the study; however, it appears that these agents may not have been especially effective at mimicking human opponents. According to the authors' report, approximately 57% of participants either believed they were playing against a human or were unsure, implying that over 40% believed they were playing against a computer. This raises concerns about ecological validity and participants' engagement with the task. It may be informative to examine whether the primary effects replicate when analyses are restricted to participants who believed they were interacting with a human opponent, as perceptions of social interaction could meaningfully influence exploitative behavior."
 
 **Response:**
-[To be completed]
+We thank the reviewer for this important suggestion. We have addressed this concern in two ways. First, we added an explicit acknowledgment in the Limitations section that 43% of participants believed they were playing against a computer, which may affect the generalizability of findings to contexts where participants are certain of human interaction. Second, we conducted a sensitivity analysis restricting analyses to the 104 participants who believed they were playing against a human or were unsure (excluding those who indicated "Computer"). The key D × Opponent × Investment three-way interaction remains significant in this restricted sample (F(1, 6936.32) = 7.19, p = .007), demonstrating that our primary findings are robust to potential concerns about ecological validity. Full results are reported in the Supplementary Materials.
 
 **Changes Made:**
-- [Location and description of changes]
+- Added limitation in Discussion (line 2641) acknowledging the 43% who believed computer
+- Added sensitivity analysis to Supplementary Materials (lines 248-339) with full model results for N=104 subsample
+- Sensitivity analysis confirms key three-way interaction (p = .007)
 
 ---
 
@@ -350,10 +356,14 @@ We have now reported gender distribution by D-factor group. As the reviewer anti
 > "The manuscript raises a particularly intriguing idea that deserves further elaboration. The suggestion that high-D individuals may not possess superior social intelligence per se, but instead differ in their learning dynamics—such as being quicker to abandon pro-social norms when environmental predictability is detected—is very interesting. Expanding on this possibility would add depth to the discussion and help reframe the observed behavior as differential adaptation rather than simple strategic dominance. This distinction has important implications and could provide a fruitful direction for future research, particularly if individual learning rates can be modeled directly."
 
 **Response:**
-[To be completed]
+We thank the reviewer for highlighting this point. We have substantially expanded the learning dynamics interpretation in the Discussion. The revised text grounds the interpretation in our observed data: exploitation emerged gradually over rounds rather than immediately (suggesting learning rather than a pre-formed plan), and the strategy transfer effect points to experience-dependent adaptation. We frame this in reinforcement learning terms—High-D individuals may update strategies more rapidly or hold weaker prosocial priors. We cite relevant literature on dual-process theories of cooperation (Bear & Rand, 2016) and research on altered prediction error processing in trait expressions through which D may manifest, such as psychopathy (Gregory et al., 2015; Atanassova et al., 2025), while being careful to note that D represents the common core underlying these expressions rather than any single trait. We discuss practical implications (interventions might focus on strengthening prosocial priors) and suggest that future research could test this by fitting computational models to individual trajectories.
 
 **Changes Made:**
-- [Location and description of changes]
+- Expanded Discussion paragraph on learning dynamics (lines 2552-2558) from 3 sentences to full paragraph (~230 words)
+- Added three new citations to bibliography:
+  - Bear & Rand (2016) PNAS - dual-process cooperation
+  - Gregory et al. (2015) Lancet Psychiatry - reinforcement learning in psychopathy
+  - Atanassova et al. (2025) Translational Psychiatry - foraging decisions and psychopathy
 
 ---
 
