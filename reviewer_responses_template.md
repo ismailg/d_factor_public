@@ -46,11 +46,11 @@ We have condensed the opponent ratings section in the main text to four summary 
 > "The effect of game order is weird, and the authors should do more to explain this."
 
 **Response:**
-We have expanded the Discussion to explain why presentation order matters for High-D participants. The key mechanism is strategy transfer: when High-D individuals encounter the Human-like HMM first, they learn that exploitation is sustainable (the HMM does not rapidly punish non-reciprocation). This learned approach then carries over to their second game, creating a "head start" in exploitative behavior even when facing a different opponent type. We have added a citation to Erev & Roth (1998) on reinforcement learning in games to support this interpretation. This finding is explicitly labeled as exploratory, given that we did not predict it a priori.
+We have expanded the Discussion to explain why presentation order matters for High-D participants. The key mechanism is strategy transfer: when High-D individuals encounter the Human-like HMM first, they learn that exploitation is sustainable (the HMM does not rapidly punish non-reciprocation). This learned approach then carries over to their second game, creating a "head start" in exploitative behavior even when facing a different opponent type. This interpretation is consistent with research showing that people transfer learned opponent models between games (Guennouni & Speekenbrink, 2022). This finding is explicitly labeled as exploratory, given that we did not predict it a priori.
 
 **Changes Made:**
 - Expanded Discussion section (lines 2582-2591) with strategy transfer mechanism explanation
-- Added citation: Erev & Roth (1998) on reinforcement learning in games
+- Added citation: Guennouni & Speekenbrink (2022) on strategy transfer between games
 - Labeled finding as exploratory
 
 ---
@@ -415,7 +415,7 @@ We thank the reviewer for highlighting this point. We have substantially expande
 | Methods | Addition | Predictor coding details |
 | Methods | Addition | Gender distribution |
 | Results | Clarification | Growth model comparison added; linear model retained |
-| Results | Reorganization | Opponent ratings moved to supplement |
+| Results | Reorganization | Opponent ratings: full stats to supplement; summary + figure retained |
 | Discussion | Addition | D vs. Agreeableness/HH discussion |
 | Discussion | Addition | Learning dynamics elaboration |
 | Discussion | Addition | Extreme-groups limitation |

@@ -655,8 +655,8 @@ Gender distribution differed significantly between D-factor groups: the High-D g
 The majority of participants identified ethnically as White ($57\%$).
 The online cohort registered $38$ unique countries of birth with the most frequent being South Africa ($24$%), the U.K.
 ($20$%) followed by Poland ($5$%) and Greece ($4$%).
-Participants were paid a fixed fee of £4 plus a bonus payment dependent on their performance that averaged £$0.5$.
-We collected data over multiple sessions between October and November 2024.
+Participants were paid a fixed fee of £4 plus a bonus payment dependent on their performance that averaged £0.50.
+Data collection occurred over multiple recruitment waves between October and November 2024.
 
 ```{r combinedPlots,include=F}
 # Ensure necessary packages are loaded
@@ -1048,9 +1048,8 @@ The difference in return percentage was statistically significant (`r papaja::ap
 
 To examine how trust behavior evolved over time, we divided the 25-round game into three approximately equal periods—early (rounds 1–8), mid (rounds 9–16), and late (rounds 17–24).
 This tripartite split allows us to track temporal dynamics while ensuring each period contains a similar number of rounds.
-The final round (round 25) was excluded due to endgame effects that could distort typical behavior.
+The final round (round 25) was excluded due to endgame effects—participants were informed it was the last interaction, which could distort typical behavior—and analysed separately.
 We compared HMM investments, absolute returns, and percentage returns between the two groups using Welch's t-tests.
-We excluded the last round and analysed that data separately as participants were told it was the last interaction in that round.
 
 As shown in Figure \@ref(fig:gamesPlot2), whilst there were no significant difference in investment received and percentage returns sent by the participants between High-D and Low-D groups during early and mid periods, significant differences emerged for all three measures during the late period.
 The HMM invested significantly *less* in High-D participants than Low-D participants (`r sprintf("t(%1.2f) = %1.2f, p = %1.3e", t_test_results$late$investment$parameter, t_test_results$late$investment$statistic, t_test_results$late$investment$p.value)`). Furthermore, High-D participants sent back significantly lower absolute returns (`r sprintf("t(%1.2f) = %1.2f, p = %1.3e", t_test_results$late$return$parameter, t_test_results$late$return$statistic, t_test_results$late$return$p.value)`) and lower percentage returns (`r sprintf("t(%1.2f) = %1.2f, p = %1.3e", t_test_results$late$pct_return$parameter, t_test_results$late$pct_return$statistic, t_test_results$late$pct_return$p.value)`) compared to Low-D participants.
