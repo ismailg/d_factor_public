@@ -4,11 +4,13 @@
 
 ---
 
-We thank both reviewers for their thoughtful and constructive feedback. Their comments have helped us strengthen the manuscript substantially. Below we provide point-by-point responses to each comment, with changes tracked in the revised manuscript.
+We thank both reviewers for their thoughtful and constructive feedback, and for their prompt review of our manuscript. Their comments have helped us strengthen the manuscript substantially. Below we provide point-by-point responses to each comment, with changes tracked in the revised manuscript.
 
 ---
 
 # REVIEWER 1
+
+We thank Reviewer 1 for their careful reading of the manuscript and their insightful suggestions regarding the growth model analysis, D-factor conceptualization, and manuscript organization. These comments have led to meaningful improvements in both our analytical approach and theoretical framing.
 
 ## Comment R1.1: Manuscript Organization
 
@@ -31,10 +33,11 @@ We have added a paragraph at the beginning of the Repeated Trust Game section th
 > "The whole section on opponent ratings could be reduced to a couple of sentences with the detailed results moved to the supplement. I am particularly unsure concerning the purpose of the play again ratings. Maybe the cooperative ratings could be regarded manipulation/validity check, so consider reporting this earlier (again in a single sentence)."
 
 **Response:**
-We have condensed the opponent ratings section in the main text to four summary sentences while moving the full ANOVA results and post-hoc comparisons to the Supplementary Materials. The main text now reports that High-D participants rated opponents as less cooperative, less trustworthy, and were less willing to play with them again, with significant main effects of D-level and opponent type. The figure showing the three rating dimensions has been retained in the main text as it provides an accessible visual summary. Full statistical details including all post-hoc pairwise comparisons are now available in the supplement.
+We have condensed the opponent ratings section in the main text to four summary sentences while moving the full ANOVA results and post-hoc comparisons to the Supplementary Materials. As the reviewer suggests, we now explicitly note that these ratings serve as a manipulation check: the significant main effect of opponent type on cooperativeness and trustworthiness ratings confirms that participants perceived the intended behavioral differences between the Human-like and Responsive HMMs. The main text now reports that High-D participants rated opponents as less cooperative, less trustworthy, and were less willing to play with them again, with significant main effects of D-level and opponent type. The figure showing the three rating dimensions has been retained in the main text as it provides an accessible visual summary. Full statistical details including all post-hoc pairwise comparisons are now available in the supplement.
 
 **Changes Made:**
 - Condensed Results/Opponent Ratings section to 4 summary sentences (lines 2130-2133)
+- Added explicit framing of ratings as manipulation/validity check
 - Added full statistical results to Supplementary Materials (lines 211-243), including ANOVA tables and post-hoc comparisons with verified statistics
 - Retained figure in main text for visual summary
 
@@ -266,6 +269,8 @@ We have corrected the p-value formatting throughout the manuscript. We created a
 ---
 
 # REVIEWER 2
+
+We thank Reviewer 2 for their thoughtful engagement with our work and their helpful suggestions regarding the conceptual positioning of D-factor, the sensitivity analyses for participant beliefs, and the expansion of our discussion of learning dynamics. These comments have strengthened both our empirical presentation and theoretical interpretation.
 
 ## Comment R2.1: Strengths Acknowledged
 

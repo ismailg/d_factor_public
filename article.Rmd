@@ -356,13 +356,13 @@ We selected two groups: High-D (90th percentile or higher, total score $> 42$, $
 To contextualize these groups relative to population norms, our High-D group ($M = 2.95$ on the 1–5 per-item scale) scored approximately 1.2 standard deviations above the normative mean ($M = 2.14$, $SD = 0.67$), placing them around the 88th percentile; our Low-D group ($M = 1.22$) scored approximately 1.4 standard deviations below, around the 8th percentile [@MoshagenZettlerHilbig2020Assessment].
 These participants were then invited via Prolific to complete the main experiment approximately one week after the screening session (the study thus comprised two sessions: an initial screening survey and the main experimental task).
 
-A sample size of 180 participants was determined *a priori* through conducting a power analysis using Monte Carlo simulations with the *simr* package in R.
+Prior to data collection, we determined our target sample size of 180 participants through a power analysis using Monte Carlo simulations with the *simr* package in R.
 The analysis specifically targeted the three-way interaction between d-score, opponent type (Human-like vs. Responsive), and investment level.
 Parameters for the simulation were based on previous studies, with an expected effect size of $-0.1$ (correlation between d-score and returns, see @Thielmann2020personality), alpha level of $0.05$, and desired power of $0.90$.
 Starting with 50 participants, we iteratively generated synthetic data for a task with $25$ rounds per condition and fitted linear mixed-effects models with random intercepts for participants.
 The simulations incorporated realistic parameter estimates and fixed effects derived from previous research using the same paradigm.
 This analysis indicated that a sample of 180 participants would provide at least $90\%$ power to detect the hypothesized three-way interaction.
-Note that the repeated-measures design (48 observations per participant across two games of 24 rounds each) yields approximately 8,800 total observations, providing substantially greater statistical power than 180 independent observations would suggest.
+The repeated-measures design (48 observations per participant across two games of 24 rounds each) yields approximately 8,800 total observations; this structure substantially increases power for detecting within-subject effects and cross-level interactions because it reduces residual variance through the estimation of participant-specific random effects.
 
 ## Design and Materials
 
@@ -2129,6 +2129,7 @@ trust_opp_by_d_game_posthoc <- apa_print(pairs(trust_opp_by_d_game, adjust = "tu
 ```
 
 Beyond behavioral measures, we analysed participants' explicit evaluations of their opponents using linear mixed-effects models (see Figure \@ref(fig:plotRatings); full statistical details in Supplementary Materials).
+These ratings also serve as a manipulation check: the significant main effect of opponent type on cooperativeness and trustworthiness ratings confirms that participants perceived the intended behavioral differences between the two HMM types.
 High-D participants rated their opponents as significantly less cooperative, less trustworthy, and were less willing to play again compared to Low-D participants.
 Ratings were also influenced by opponent type (Human-like HMM rated more favorably than Responsive) and game order (first game rated higher).
 For trust ratings, a significant three-way interaction between D-level, game order, and opponent type revealed that High-D participants showed particularly negative perceptions of Human-like opponents early in the interaction and Responsive opponents later, while Low-D participants showed increasing trust over time.
@@ -2617,7 +2618,7 @@ First, while we observed clear behavioral differences between high and Low-D ind
 Future studies could include measures of specific dark traits alongside the D-factor to examine whether unique trait aspects beyond the shared core contribute differently to strategic behavior.
 Second, our extreme-groups design, while maximizing statistical power to detect group differences, excludes individuals in the middle of the D distribution and limits our ability to draw conclusions about how D operates across its full range. The relationship between D and exploitation may not be linear; for instance, moderate-D individuals might show qualitatively different patterns than those at the extremes. Future research should treat D as a continuous variable to provide a more comprehensive understanding of how exploitative behavior varies as a function of D-factor scores.
 Third, our use of HMM opponents provided excellent experimental control but may limit ecological validity.
-Notably, approximately 43% of participants believed they were playing against a computer rather than a human, which may have influenced their behavior. However, a sensitivity analysis excluding only those participants who were certain they played a computer (retaining those who believed "Human" or were "Not Sure"; N = 104) showed that our key findings—including the D × Opponent × Investment interaction—remained significant (see Supplementary Materials).
+Notably, approximately 43% of participants believed they were playing against a computer rather than a human, which may have influenced their behavior. However, a sensitivity analysis excluding only those participants who were certain they played a computer (retaining those who believed "Human" or were "Not Sure"; N = 104) showed that our key findings—including the D × Opponent × Investment interaction—remained significant (see Supplementary Materials). Similarly, given the gender imbalance between D-level groups (High-D: 70% male; Low-D: 41% male), we confirmed that adding gender as a covariate did not alter our primary findings (see Supplementary Materials).
 Future research could examine D-factor influences in fully human interactions to capture the richer social dynamics of real-world trust building.
 Fourth, while our power analysis was designed to detect the confirmatory three-way interaction (D × Opponent × Investment), the higher-order interactions involving presentation order and round number were exploratory and should be interpreted with appropriate caution given reduced statistical power for such complex effects.
 Finally, while we found significant differences in behavior and perception, we did not explore the underlying affective or cognitive processes that mediate these effects.

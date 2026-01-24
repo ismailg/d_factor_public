@@ -551,4 +551,72 @@ Note: Lower values indicate better fit. The BIC, which penalizes model complexit
 \pagebreak
 
 
+# Sensitivity Analysis: Controlling for Gender {-}
+
+Given the significant gender imbalance between D-level groups (High-D: 70% male; Low-D: 41% male), we conducted a sensitivity analysis to examine whether the key D-level × Opponent × Investment interaction remained significant when controlling for participant gender.
+
+```{r gender-sensitivity-setup, include=FALSE}
+# Load demographics for gender information
+demographics <- read.csv("data/anonymized_demographics.csv")
+
+# Merge gender into data24 (if data24 not already loaded, load it)
+if (!exists("data24")) {
+  final_data <- read.csv("data/anonymized_final_data.csv")
+
+  final_data <- final_data %>%
+    mutate(ret_pct_na = ifelse(investment == 0, NA, return / (3 * investment)),
+           opponent.f = factor(gameOpponent, levels = c("AI_HMM", "AI_HMM_vol")),
+           d_level = as.factor(d_level),
+           roundNum = as.numeric(as.character(roundNum)),
+           inv_scaled = as.vector(scale(investment)))
+
+  data24 <- final_data %>% filter(roundNum < 25)
+}
+
+# Merge gender
+data24_gender <- data24 %>%
+  left_join(demographics %>% dplyr::select(playerId, Sex), by = "playerId") %>%
+  filter(Sex %in% c("Male", "Female")) %>%  # Exclude missing/revoked
+  mutate(Sex = factor(Sex))
+
+n_gender <- length(unique(data24_gender$playerId))
+```
+
+```{r gender-sensitivity-model, include=FALSE, cache=TRUE}
+# Run model with gender as covariate (main effect only)
+mod_gender <- afex::mixed(
+  ret_pct_na ~ Sex + opponent.f * inv_scaled * d_level * volatile_first * roundNum +
+    (1 + opponent.f + inv_scaled | playerId),
+  data = data24_gender,
+  REML = TRUE,
+  method = "KR",
+  control = lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+)
+
+# Extract ANOVA table
+gender_anova <- anova(mod_gender)
+
+# Get key statistics
+gender_main <- gender_anova["Sex", ]
+gender_main_F <- gender_main$F
+gender_main_p <- gender_main$`Pr(>F)`
+
+d_opp_inv_row <- gender_anova["d_level:opponent.f:inv_scaled", ]
+d_opp_inv_F <- d_opp_inv_row$F
+d_opp_inv_p <- d_opp_inv_row$`Pr(>F)`
+d_opp_inv_df1 <- d_opp_inv_row$`num Df`
+d_opp_inv_df2 <- d_opp_inv_row$`den Df`
+```
+
+We added participant gender (Male/Female; N = `r n_gender` participants with valid gender data) as a main effect covariate to our primary mixed-effects model. Gender was included as a main effect rather than interacted with other predictors to address confounding while preserving power.
+
+**Results:**
+
+Gender showed a significant main effect on return percentages (*F*(1, `r round(gender_main$"den Df", 1)`) = `r round(gender_main_F, 2)`, *p* = `r sprintf("%.3f", gender_main_p)`), with female participants returning higher percentages than male participants on average. Critically, however, the key D-level × Opponent × Investment interaction remained statistically significant when controlling for gender (*F*(`r d_opp_inv_df1`, `r round(d_opp_inv_df2, 1)`) = `r round(d_opp_inv_F, 2)`, *p* = `r sprintf("%.3f", d_opp_inv_p)`).
+
+This sensitivity analysis confirms that our primary finding---differential exploitation patterns between high-D and low-D individuals depending on opponent type and investment level---is not attributable to the gender imbalance between D-level groups.
+
+\pagebreak
+
+
 # References {-}
