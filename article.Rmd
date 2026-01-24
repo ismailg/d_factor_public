@@ -376,7 +376,7 @@ All participants provided informed consent prior to their participation.
 
 ### Repeated Trust Game (RTG)
 
-The trust game is a two-player sequential game that captures the tension between self-interest and mutual benefit [@Berg1995]. An investor transfers part of their endowment to a trustee; this amount is multiplied (typically tripled), and the trustee decides how much to return. From a purely self-interested perspective, the trustee's dominant strategy is to keep everything, yet returning a fair share can sustain cooperation and yield higher long-term gains for both parties.
+The trust game is a two-player sequential game that captures the tension between self-interest and mutual benefit [@Berg1995]. An investor transfers part of their endowment to a trustee; this amount is multiplied (typically tripled), and the trustee decides how much to return. This creates a social dilemma: while keeping everything maximizes immediate payoff, returning a fair share can sustain cooperation and yield higher long-term gains for both parties.
 
 Based on @Berg1995, participants always acted as the trustee.
 In each round, the HMM investor received 20 units and decided how much (0-20) to invest.
@@ -656,7 +656,6 @@ The majority of participants identified ethnically as White ($57\%$).
 The online cohort registered $38$ unique countries of birth with the most frequent being South Africa ($24$%), the U.K.
 ($20$%) followed by Poland ($5$%) and Greece ($4$%).
 Participants were paid a fixed fee of £4 plus a bonus payment dependent on their performance that averaged £0.50.
-Data collection occurred over multiple recruitment waves between October and November 2024.
 
 ```{r combinedPlots,include=F}
 # Ensure necessary packages are loaded
