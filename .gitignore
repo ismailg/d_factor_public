@@ -6,3 +6,7 @@
 CLAUDE.md
 REVISION_PLAN.md
 REVISION_TRACKER.md
+
+# Build artifacts
+*.log
+*_cache/
