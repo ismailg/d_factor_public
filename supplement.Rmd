@@ -601,7 +601,7 @@ gender_main <- gender_anova["Sex", ]
 gender_main_F <- gender_main$F
 gender_main_p <- gender_main$`Pr(>F)`
 
-d_opp_inv_row <- gender_anova["d_level:opponent.f:inv_scaled", ]
+d_opp_inv_row <- gender_anova["opponent.f:inv_scaled:d_level", ]
 d_opp_inv_F <- d_opp_inv_row$F
 d_opp_inv_p <- d_opp_inv_row$`Pr(>F)`
 d_opp_inv_df1 <- d_opp_inv_row$`num Df`

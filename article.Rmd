@@ -369,7 +369,7 @@ The repeated-measures design (48 observations per participant across two games o
 The experiment employed a 2 (HMM Type: Human-like vs. Responsive) × 2 (D-Factor: High vs. Low) mixed design, with HMM Type as a within-subjects factor.
 Participants completed two phases, each involving a 25-round Repeated Trust Game (RTG), against either the Human-like or Responsive HMM investor. Participants were randomly assigned to encounter either the Human-like or Responsive HMM first, with presentation order counterbalanced across participants.
 The experimental interface was designed and implemented online using Empirica v1 [@Almaatouq2021], with an estimated completion time of 30 minutes per participant.
-The study received approval from the University of [Masked for Blind Review] ethics commission with ID [Masked for Blind Review] and the experiment was performed in accordance with the ethics board guidelines and regulations.
+The study received approval from the University of Heidelberg ethics commission with ID: S-708/2023 and the experiment was performed in accordance with the ethics board guidelines and regulations.
 All participants provided informed consent prior to their participation.
 
 <!-- (ID:S-708/2023) -->
@@ -811,9 +811,7 @@ Full model specifications and additional analytical details are provided in the 
 
 ## Data, Materials, and Code Availability
 
-The data and analysis code that support the findings of this study are available at a public GitHub repository [Masked for Blind Review].
-The repository contains all materials needed to reproduce the analyses, including anonymized data, code (in R), and a README file.
-To maintain anonymity during the peer-review process, the link will be provided upon acceptance or can be shared upon request to the editorial office.
+All study materials, primary data, and analysis scripts are publicly available at https://github.com/ismailg/d_factor_public [@GuennouniKornKoppe2025data].
 
 # Results
 
@@ -1303,7 +1301,7 @@ wilcox.test(return ~ d_level, data = last_round_data)
 
 ## Last Round Analysis
 
-In the last round, High-D participants sent back significantly lower absolute returns than Low-D participants (`r sprintf("t(%1.2f) = %1.2f, p = %1.3f", t.test(return ~ d_level, data = last_round_data)$parameter, t.test(return ~ d_level, data = last_round_data)$statistic, t.test(return ~ d_level, data = last_round_data)$p.value)`); `r sprintf("Wilcoxon W = %1.0f, p = %1.3f", wilcox.test(return ~ d_level, data = last_round_data)$statistic, wilcox.test(return ~ d_level, data = last_round_data)$p.value)`). Similarly, High-D participants sent back a significantly lower percentage of the tripled investment (`r sprintf("t(%1.2f) = %1.2f, p = %1.3f", t.test(return_pct ~ d_level, data = last_round_data)$parameter, t.test(return_pct ~ d_level, data = last_round_data)$statistic, t.test(return_pct ~ d_level, data = last_round_data)$p.value)`); `r sprintf("Wilcoxon W = %1.0f, p = %1.3f", wilcox.test(return_pct ~ d_level, data = last_round_data)$statistic, wilcox.test(return_pct ~ d_level, data = last_round_data)$p.value)`). Both parametric (t-test) and non parametric tests (Wilcoxon) show significant differences.
+In the last round, High-D participants sent back significantly lower absolute returns than Low-D participants (`r sprintf("t(%1.2f) = %1.2f, p = %1.3f", t.test(return ~ d_level, data = last_round_data)$parameter, t.test(return ~ d_level, data = last_round_data)$statistic, t.test(return ~ d_level, data = last_round_data)$p.value)`); `r sprintf("Wilcoxon W = %1.0f, p = %1.3f", wilcox.test(return ~ d_level, data = last_round_data)$statistic, wilcox.test(return ~ d_level, data = last_round_data)$p.value)`). Similarly, High-D participants sent back a significantly lower percentage of the tripled investment (`r sprintf("t(%1.2f) = %1.2f, p = %1.3f", t.test(return_pct ~ d_level, data = last_round_data)$parameter, t.test(return_pct ~ d_level, data = last_round_data)$statistic, t.test(return_pct ~ d_level, data = last_round_data)$p.value)`); `r sprintf("Wilcoxon W = %1.0f, p = %1.3f", wilcox.test(return_pct ~ d_level, data = last_round_data)$statistic, wilcox.test(return_pct ~ d_level, data = last_round_data)$p.value)`). Both parametric (t-test) and non-parametric tests (Wilcoxon) show significant differences.
 
 <!-- ### proportion of states by round and opponent  -->
 
@@ -1764,7 +1762,7 @@ trend_data <- as.data.frame(trends_continuous) %>%
 
 ```
 
-```{r orderEffectPlot, include=T, fig.pos="H", fig.cap="Effect of game order on changes in return rate across rounds at different investment levels. Lines represent the estimated slope coefficients (change in return rate per round) with shaded areas showing 95 percent confidence intervals. Negative values indicate decreasing reciprocity over time. High-D participants who played against the stable opponent first showed strategic exploitation primarily at high investment levels, while those who faced the volatile opponent first showed different strategic patterns. Low D-factor participants maintained more consistent return rates regardless of order condition.", fig.align="center",  out.width="\\textwidth", dev="pdf", fig.width=10, fig.height=6}
+```{r orderEffectPlot, include=T, fig.pos="H", fig.cap="Effect of game order on changes in return rate across rounds at different investment levels. Lines represent the estimated slope coefficients (change in return rate per round) with shaded areas showing 95 percent confidence intervals. Negative values indicate decreasing reciprocity over time. High-D participants who played against the Human-like opponent first showed strategic exploitation primarily at high investment levels, while those who faced the Responsive opponent first showed different strategic patterns. Low D-factor participants maintained more consistent return rates regardless of order condition.", fig.align="center",  out.width="\\textwidth", dev="pdf", fig.width=10, fig.height=6}
 
 ggplot(trend_data, aes(x = inv_scaled, y = roundNum.trend,
                        color = volatile_first, fill = volatile_first)) +
@@ -1775,11 +1773,11 @@ ggplot(trend_data, aes(x = inv_scaled, y = roundNum.trend,
   geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
   scale_color_manual(
     values = c("#7570b3", "#e7298a"),
-    labels = c("Human-like First" = "Stable First", "Responsive First" = "Volatile First")
+    labels = c("Human-like First" = "Human-like First", "Responsive First" = "Responsive First")
   ) +
   scale_fill_manual(
     values = c("#7570b3", "#e7298a"),
-    labels = c("Human-like First" = "Stable First", "Responsive First" = "Volatile First")
+    labels = c("Human-like First" = "Human-like First", "Responsive First" = "Responsive First")
   ) +
   labs(
     x     = "Investment Level (Standardized)",
@@ -1828,7 +1826,7 @@ ggplot(trend_data, aes(x = inv_scaled, y = roundNum.trend,
 ### Four-Way Interaction: Investment, Order, D-factor, and Round Number (Exploratory)
 
 The significant four-way interaction involving investment amount, order of opponent presentation (responsive first or stable/human-like first), D-factor, and round number (`r papaja::apa_print(mod_return_pct)$full_result$inv_scaled_d_level_volatile_first_roundNum`) reveals a complex interplay of factors influencing return behavior; as noted in our analytic strategy, this higher-order interaction is exploratory and should be interpreted with caution.
-As seen in Figure \@ref(fig:orderEffectPlot), The key finding is that the *order* in which participants faced the opponents, combined with their D-factor level, influenced how their returns changed over time *depending on the investment level*.
+As seen in Figure \@ref(fig:orderEffectPlot), the key finding is that the *order* in which participants faced the opponents, combined with their D-factor level, influenced how their returns changed over time *depending on the investment level*.
 
 <!-- To disentangle this interaction, we used `emtrends` to examine the simple slopes of return percentage over rounds, for each combination of D-factor, order condition, and investment level. We then used `test()` to determine if these slopes were significantly different from zero. -->
 
@@ -2413,7 +2411,7 @@ final_plot2 <- create_rating_plots(
 
 ```
 
-```{r plotRatings,include=T, echo=FALSE, warning=FALSE, fig.pos='H', fig.cap="Averages and standard errors of the participants ratings of the opponent (y-axis) by each game and D-factor group for each opponent (x-axis). The left panel represents participants' perception of HMM cooperativeness, the right one indicates perceived HMM trust rating, and the middle panel shows the participants' willingness to play again with the same HMM. Cooperation, trust perception, and willingness to play again ratings were generally lower for the high DFP group.",   fig.width=10,fig.height=6, out.width="\\textwidth",  fig.align="center"}
+```{r plotRatings,include=T, echo=FALSE, warning=FALSE, fig.pos='H', fig.cap="Averages and standard errors of the participants ratings of the opponent (y-axis) by each game and D-factor group for each opponent (x-axis). The left panel represents participants' perception of HMM cooperativeness, the right one indicates perceived HMM trust rating, and the middle panel shows the participants' willingness to play again with the same HMM. Cooperation, trust perception, and willingness to play again ratings were generally lower for the High-D group.",   fig.width=10,fig.height=6, out.width="\\textwidth",  fig.align="center"}
 
 final_plot2
 ```
@@ -2534,7 +2532,7 @@ There was no significant difference between the proportion of correct answers be
 The present study investigated how the Dark Factor of Personality (D-factor) influences behavior in repeated trust games, focusing on trustworthiness patterns, strategic adaptation, and perception of counterparts.
 Our findings reveal nuanced relationships between dark personality traits and economic decision-making that both confirm and challenge existing theoretical frameworks.
 
-Our results demonstrated significant behavioral differences between individuals with high and Low-D scores.
+Our results demonstrated significant behavioral differences between individuals with High-D and Low-D scores.
 High-D participants consistently returned lower proportions of investment compared to their Low-D counterparts, with this difference becoming particularly pronounced in later rounds of the game.
 This pattern aligns with the fundamental definition of the D-factor as "the general tendency to maximize one's utility at the expense of others, accompanied by beliefs that serve as justifications" [@Moshagen2018].
 The lower return percentages directly translate to greater self-benefit at the investor's expense, supporting the construct validity of the D-factor in predicting economic behavior.
@@ -2574,7 +2572,7 @@ This stability in cooperative behavior may reflect stronger adherence to fairnes
 The analysis of opponent ratings revealed that D-factor scores significantly influenced how participants perceived their counterparts.
 High-D participants consistently rated their opponents lower on cooperativeness, trustworthiness, and desirability for future interaction, regardless of the opponent's actual behavior.
 This negative perceptual bias is consistent with research suggesting that individuals with dark personality traits may have distorted social perceptions that justify exploitation [@Moshagen2018; @Zettler2021].
-The interaction between D-factor, game order, and opponent type for trust ratings suggests complex differences in how high and Low-D individuals update their social perceptions based on experience.
+The interaction between D-factor, game order, and opponent type for trust ratings suggests complex differences in how High-D and Low-D individuals update their social perceptions based on experience.
 While Low-D participants showed increased trust in human-like opponents from first to second game, High-D participants showed decreased trust in Responsive opponents.
 This differential updating may reflect differences in attribution processes: Low-D individuals may attribute positive interactions to stable traits of their partner, while High-D individuals may be more sensitive to negative interactions and use them to justify subsequent exploitation.
 These findings extend beyond economic behavior to suggest that the D-factor influences the entire process of social perception and decision-making.
@@ -2601,7 +2599,7 @@ First, they demonstrate that the D-factor, as a unifying construct of dark perso
 The convergent patterns of exploitation, negative social perception, and self-maximization across different measures support the conceptual coherence of the D-factor construct.
 Regarding the relationship between D and established personality dimensions, prior research has shown that D and low Honesty-Humility share substantial variance (~66%) but remain functionally distinct [@HilbigZettlerMoshagenThielmann2021]. D better captures distrust-related beliefs and lack of empathy—components theoretically outside Honesty-Humility's scope—while low Honesty-Humility better accounts for pretentiousness. Similarly, while low Agreeableness captures ill-temperedness, D more comprehensively captures utility-maximization accompanied by justificatory beliefs that directly maps onto strategic exploitation in economic games. When tested against 58 personality traits and related constructs, D emerged as the singular dispositional predictor of how individuals weigh their own versus others' utility [@HilbigThielmannZettlerMoshagen2023]. Our findings are thus best understood through the D framework, though they likely generalize to individuals low in Honesty-Humility given the substantial overlap.
 Second, our results highlight the importance of considering the temporal dimension of trust and reciprocity.
-The emerging differences between high and Low-D participants over repeated interactions suggest that single-round economic games may underestimate the influence of personality traits on economic behavior.
+The emerging differences between High-D and Low-D participants over repeated interactions suggest that single-round economic games may underestimate the influence of personality traits on economic behavior.
 Future research should continue to examine how personality influences behavioral trajectories rather than just static decision points.
 Third, the interaction between D-factor and opponent volatility provides insight into the contextual sensitivity of dark personality traits.
 The finding that High-D individuals modulate their exploitation strategies based on opponent predictability may reflect sophisticated social intelligence rather than rigid antisocial tendencies, though as discussed above, differential learning dynamics offer an alternative explanation.
@@ -2613,7 +2611,7 @@ Interventions that highlight these long-term consequences might help redirect se
 ## Limitations and future directions
 
 Several limitations of the current study suggest directions for future research.
-First, while we observed clear behavioral differences between high and Low-D individuals, our design measured only the common core (D) and cannot determine whether the observed patterns differ across specific dark trait expressions (e.g., whether individuals high in Machiavellianism show different strategic patterns than those high in narcissism).
+First, while we observed clear behavioral differences between High-D and Low-D individuals, our design measured only the common core (D) and cannot determine whether the observed patterns differ across specific dark trait expressions (e.g., whether individuals high in Machiavellianism show different strategic patterns than those high in narcissism).
 Future studies could include measures of specific dark traits alongside the D-factor to examine whether unique trait aspects beyond the shared core contribute differently to strategic behavior.
 Second, our extreme-groups design, while maximizing statistical power to detect group differences, excludes individuals in the middle of the D distribution and limits our ability to draw conclusions about how D operates across its full range. The relationship between D and exploitation may not be linear; for instance, moderate-D individuals might show qualitatively different patterns than those at the extremes. Future research should treat D as a continuous variable to provide a more comprehensive understanding of how exploitative behavior varies as a function of D-factor scores.
 Third, our use of HMM opponents provided excellent experimental control but may limit ecological validity.
@@ -2623,7 +2621,7 @@ Fourth, while our power analysis was designed to detect the confirmatory three-w
 Finally, while we found significant differences in behavior and perception, we did not explore the underlying affective or cognitive processes that mediate these effects.
 Future studies could incorporate measures of empathy, moral disengagement, or social value orientation to understand how dark personality traits influence the subjective experience of economic exchanges.
 Furthermore, our participant sample, while diverse in country of origin, was recruited through an online platform and consisted primarily of individuals from Western countries.
-Future research should aim to replicate these findings in different cultural and socio-economic contexts to establish the broader generalizability of the D-factor's influence on strategic social behavior
+Future research should aim to replicate these findings in different cultural and socio-economic contexts to establish the broader generalizability of the D-factor's influence on strategic social behavior.
 
 # Conclusion
 
@@ -2637,6 +2635,38 @@ They extend previous research on dark personality traits by revealing how exploi
 Future research should continue to explore the cognitive and affective mechanisms underlying these behavioral patterns and examine how interventions might promote cooperation even among individuals with stronger exploitative tendencies.
 Understanding the relationship between the D-factor and trustworthiness has significant implications for promoting cooperative outcomes in economic and social interactions.
 By recognizing how dark personality traits influence trust dynamics, we can develop more effective strategies for fostering cooperation and limiting the social costs of exploitation.
+
+\pagebreak
+
+# Author contributions statement {.unnumbered}
+
+I. Guennouni, G. Koppe and C. Korn. designed and developed the study
+concept. Experiment design, testing and data collection were performed
+by I. Guennouni. I. Guennouni analysed and interpreted the data under
+the supervision of G. Koppe and C. Korn. All authors jointly wrote and
+approved the final version of the manuscript for submission.
+
+# Funding {.unnumbered}
+
+This study was supported by the Federal Ministry of Science, Education,
+and Culture (MWK) of the state of Baden-Württemberg within the AI Health
+Innovation Cluster Initiative, the German Research Foundation (DFG)
+within the Excellence Strategy EXC 2181/1 – 390900948 (STRUCTURES), and
+the Hector II foundation. I. Guennouni was supported by a research
+fellowship from the AI Health Innovation Cluster.
+
+# Competing interests statement {.unnumbered}
+
+The author(s) declared that there were no conflicts of interest with
+respect to the authorship or the publication of this article.
+
+# Acknowledgements {.unnumbered}
+
+We are grateful to Tobias Nolte, Andreas Hula and Read Montague's team
+at Virginia Tech for sharing with us the data on the RTG allowing us to
+fit the HMM to investor data. We're also grateful for Samuel Dupret for
+help designing the online platform used for the experiment and Maarten
+Speekenbrink for his guidance on the use of HMM models.
 
 \pagebreak
 
