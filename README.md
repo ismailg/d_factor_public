@@ -1,8 +1,11 @@
 # The Price of Dark Traits: Strategic Exploitation and Its Limitations in Repeated Interactions
 
+[![DOI](https://zenodo.org/badge/1007160928.svg)](https://doi.org/10.5281/zenodo.18846593)
+
 ## Overview
 
 This repository contains the data and analysis code for the study investigating how the Dark Factor of Personality (D-factor) influences strategic behavior in repeated trust games.
+The version associated with the journal submission is archived on Zenodo: https://doi.org/10.5281/zenodo.18846593.
 
 ## Abstract
 
