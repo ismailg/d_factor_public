@@ -811,7 +811,7 @@ Full model specifications and additional analytical details are provided in the 
 
 ## Data, Materials, and Code Availability
 
-All study materials, primary data, and analysis scripts are publicly available at https://github.com/ismailg/d_factor_public [@GuennouniKornKoppe2025data].
+Data and relevant code for this research work are stored in GitHub: https://github.com/ismailg/d_factor_public and have been archived within the Zenodo repository: https://doi.org/10.5281/zenodo.18846593.
 
 # Results
 
