@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use these data or analysis materials, please cite the repository and its archived Zenodo release."
+title: "Data and Code from: The Price of Dark Traits: Strategic Exploitation and Its Limitations in Repeated Interactions"
+type: software
+authors:
+  - family-names: "Guennouni"
+    given-names: "Ismail"
+  - family-names: "Korn"
+    given-names: "Christoph W."
+  - family-names: "Koppe"
+    given-names: "Georgia"
+repository-code: "https://github.com/ismailg/d_factor_public"
+url: "https://github.com/ismailg/d_factor_public"
+license: "CC-BY-4.0"
+abstract: "Public data and analysis code for the study on D-factor, repeated trust games, and strategic exploitation."
+keywords:
+  - "dark factor of personality"
+  - "repeated trust game"
+  - "hidden Markov model"
+  - "behavioral economics"
+  - "personality psychology"

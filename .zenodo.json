@@ -1,0 +1,25 @@
+{
+  "title": "Data and Code from: The Price of Dark Traits: Strategic Exploitation and Its Limitations in Repeated Interactions",
+  "description": "Data and analysis code for the study \"The Price of Dark Traits: Strategic Exploitation and Its Limitations in Repeated Interactions\". The repository contains the public manuscript source, supplementary materials, anonymized data, and analysis code used to reproduce the reported results.",
+  "creators": [
+    {
+      "name": "Guennouni, Ismail"
+    },
+    {
+      "name": "Korn, Christoph W."
+    },
+    {
+      "name": "Koppe, Georgia"
+    }
+  ],
+  "license": "cc-by-4.0",
+  "access_right": "open",
+  "upload_type": "software",
+  "keywords": [
+    "dark factor of personality",
+    "repeated trust game",
+    "hidden Markov model",
+    "behavioral economics",
+    "personality psychology"
+  ]
+}
